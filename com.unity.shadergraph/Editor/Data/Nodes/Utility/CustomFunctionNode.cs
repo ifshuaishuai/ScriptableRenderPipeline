@@ -80,19 +80,21 @@ namespace UnityEditor.ShaderGraph
                 if(generationMode == GenerationMode.Preview && slots.Count != 0)
                 {
                     slots.OrderBy(s => s.id);
-                    visitor.AddShaderChunk(string.Format("{0} {1};",
-                        NodeUtils.ConvertConcreteSlotValueTypeToString(precision, slots[0].concreteValueType),
-                        GetVariableNameForSlot(slots[0].id)));
+                    sb.AppendLine("{0} _{1}_{2};",
+                        slots[0].concreteValueType.ToShaderString(),
+                        GetVariableNameForNode(),
+                        NodeUtils.GetHLSLSafeName(slots[0].shaderOutputName));
                 }
                 return;
             }
 
             foreach (var argument in slots)
-                visitor.AddShaderChunk(string.Format("{0} {1};",
-                    NodeUtils.ConvertConcreteSlotValueTypeToString(precision, argument.concreteValueType),
-                    GetVariableNameForSlot(argument.id)));
+                sb.AppendLine("{0} _{1}_{2};",
+                    argument.concreteValueType.ToShaderString(),
+                    GetVariableNameForNode(),
+                    NodeUtils.GetHLSLSafeName(argument.shaderOutputName));
 
-            string call = string.Format("{0}_{1}(", functionName, precision);
+            string call = string.Format("{0}_$precision(", functionName);
             bool first = true;
 
             slots.Clear();
@@ -151,7 +153,7 @@ namespace UnityEditor.ShaderGraph
 
         private string GetFunctionHeader()
         {
-            string header = string.Format("void {0}_{1}(", functionName, precision);
+            string header = string.Format("void {0}_$precision(", functionName);
             var first = true;
             List<MaterialSlot> slots = new List<MaterialSlot>();
 
@@ -161,7 +163,7 @@ namespace UnityEditor.ShaderGraph
                 if (!first)
                     header += ", ";
                 first = false;
-                header += string.Format("{0} {1}", argument.concreteValueType.ToString(precision), argument.shaderOutputName);
+                header += string.Format("{0} {1}", argument.concreteValueType.ToShaderString(), argument.shaderOutputName);
             }
 
             slots.Clear();
@@ -171,7 +173,7 @@ namespace UnityEditor.ShaderGraph
                 if (!first)
                     header += ", ";
                 first = false;
-                header += string.Format("out {0} {1}", argument.concreteValueType.ToString(precision), argument.shaderOutputName);
+                header += string.Format("out {0} {1}", argument.concreteValueType.ToShaderString(), argument.shaderOutputName);
             }
             header += ")";
             return header;

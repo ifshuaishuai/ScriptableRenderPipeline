@@ -1179,9 +1179,7 @@ namespace UnityEditor.ShaderGraph
                     {
                         hlslName = $"{hlslName}_{slot.id}";
                     }
-                    surfaceDescriptionStruct.AppendLine("{0} {1};",
-                        NodeUtils.ConvertConcreteSlotValueTypeToString(AbstractMaterialNode.OutputPrecision.@float,
-                            slot.concreteValueType), hlslName);
+                    surfaceDescriptionStruct.AppendLine("{0} {1};", slot.concreteValueType.ToShaderString(), hlslName);
 
                     if (activeFields != null)
                     {
@@ -1288,9 +1286,7 @@ namespace UnityEditor.ShaderGraph
                 foreach (var slot in slots)
                 {
                     string hlslName = NodeUtils.GetHLSLSafeName(slot.shaderOutputName);
-                    builder.AppendLine("{0} {1};",
-                        NodeUtils.ConvertConcreteSlotValueTypeToString(AbstractMaterialNode.OutputPrecision.@float, slot.concreteValueType),
-                        hlslName);
+                    builder.AppendLine("{0} {1};", slot.concreteValueType.ToShaderString(), hlslName);
 
                     if (activeFields != null)
                     {
