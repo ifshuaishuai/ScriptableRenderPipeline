@@ -1029,7 +1029,7 @@ namespace UnityEditor.ShaderGraph
             // -------------------------------------
             // Generate Output structure for Surface Description function
 
-            GenerateSurfaceDescriptionStruct(surfaceDescriptionStruct, slots, useIdsInNames: !(node is IMasterNode));
+            GenerateSurfaceDescriptionStruct(surfaceDescriptionStruct, slots, node);
 
             // -------------------------------------
             // Generate Surface Description function
@@ -1053,6 +1053,17 @@ namespace UnityEditor.ShaderGraph
             // Generate Input structure for Vertex shader
 
             GenerateApplicationVertexInputs(requirements, vertexInputs);
+
+            // ----------------------------------------------------- //
+            //                     REPLACEMENTS                      //
+            // ----------------------------------------------------- //
+
+            // -------------------------------------
+            // Precision
+
+            functionBuilder.DoReplacement(ReplacementProcessor.Precision);
+            surfaceDescriptionStruct.DoReplacement(ReplacementProcessor.Precision);
+            surfaceDescriptionFunction.DoReplacement(ReplacementProcessor.Precision);
 
             // ----------------------------------------------------- //
             //                      FINALIZE                         //
@@ -1167,8 +1178,11 @@ namespace UnityEditor.ShaderGraph
                 sb.AppendLine($"{variableName}.{channel.GetUVName()} = IN.{channel.GetUVName()};");
         }
 
-        public static void GenerateSurfaceDescriptionStruct(ShaderStringBuilder surfaceDescriptionStruct, List<MaterialSlot> slots, string structName = "SurfaceDescription", HashSet<string> activeFields = null, bool useIdsInNames = false)
+        public static void GenerateSurfaceDescriptionStruct(ShaderStringBuilder surfaceDescriptionStruct, List<MaterialSlot> slots, AbstractMaterialNode rootNode, string structName = "SurfaceDescription", HashSet<string> activeFields = null)
         {
+            if(rootNode != null)
+                surfaceDescriptionStruct.currentNode = rootNode;
+
             surfaceDescriptionStruct.AppendLine("struct {0}", structName);
             using (surfaceDescriptionStruct.BlockSemicolonScope())
             {
@@ -1187,6 +1201,8 @@ namespace UnityEditor.ShaderGraph
                     }
                 }
             }
+
+            surfaceDescriptionStruct.currentNode = null;
         }
 
         public static void GenerateSurfaceDescriptionFunction(
@@ -1239,6 +1255,8 @@ namespace UnityEditor.ShaderGraph
 
                 if (rootNode is IMasterNode || rootNode is SubGraphOutputNode)
                 {
+                    surfaceDescriptionFunction.currentNode = rootNode;
+
                     var usedSlots = slots ?? rootNode.GetInputSlots<MaterialSlot>();
                     foreach (var input in usedSlots)
                     {
@@ -1276,12 +1294,16 @@ namespace UnityEditor.ShaderGraph
                 }
 
                 surfaceDescriptionFunction.AppendLine("return surface;");
+                surfaceDescriptionFunction.currentNode = null;
             }
         }
 
         const string k_VertexDescriptionStructName = "VertexDescription";
-        public static void GenerateVertexDescriptionStruct(ShaderStringBuilder builder, List<MaterialSlot> slots, string structName = k_VertexDescriptionStructName, HashSet<string> activeFields = null)
+        public static void GenerateVertexDescriptionStruct(ShaderStringBuilder builder, List<MaterialSlot> slots, AbstractMaterialNode rootNode, string structName = k_VertexDescriptionStructName, HashSet<string> activeFields = null)
         {
+            if(rootNode != null)
+                builder.currentNode = rootNode;
+
             builder.AppendLine("struct {0}", structName);
             using (builder.BlockSemicolonScope())
             {
@@ -1296,6 +1318,8 @@ namespace UnityEditor.ShaderGraph
                     }
                 }
             }
+
+            builder.currentNode = null;
         }
 
         public static void GenerateVertexDescriptionFunction(
@@ -1333,13 +1357,18 @@ namespace UnityEditor.ShaderGraph
                     var generatesBodyCode = node as IGeneratesBodyCode;
                     if (generatesBodyCode != null)
                     {
-                        generatesBodyCode.GenerateNodeCode(sg, graphContext, mode);
+                        builder.currentNode = node;
+                        generatesBodyCode.GenerateNodeCode(builder, graphContext, mode);
                     }
                     node.CollectShaderProperties(shaderProperties, mode);
                 }
-                builder.AppendLines(sg.GetShaderString(0));
+
+                functionRegistry.builder.currentNode = null;
+                builder.currentNode = null;              
+
                 foreach (var slot in slots)
                 {
+                    builder.currentNode = slot.owner;
                     var isSlotConnected = slot.owner.owner.GetEdges(slot.slotReference).Any();
                     var slotName = NodeUtils.GetHLSLSafeName(slot.shaderOutputName);
                     var slotValue = isSlotConnected ? ((AbstractMaterialNode)slot.owner).GetSlotValue(slot.id, mode) : slot.GetDefaultValue(mode);
@@ -1347,6 +1376,8 @@ namespace UnityEditor.ShaderGraph
                 }
                 builder.AppendLine("return description;");
             }
+
+            builder.currentNode = null;
         }
 
         public static GenerationResults GetPreviewShader(this GraphData graph, AbstractMaterialNode node)
