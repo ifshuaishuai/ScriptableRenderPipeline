@@ -1226,7 +1226,8 @@ namespace UnityEditor.ShaderGraph
 
                     if (activeNode is IGeneratesBodyCode bodyNode)
                     {
-                        bodyNode.GenerateNodeCode(sg, graphContext, mode);
+                        surfaceDescriptionFunction.currentNode = activeNode;
+                        bodyNode.GenerateNodeCode(surfaceDescriptionFunction, graphContext, mode);
                     }
 
                     activeNode.CollectShaderProperties(shaderProperties, mode);
@@ -1234,6 +1235,7 @@ namespace UnityEditor.ShaderGraph
 
                 surfaceDescriptionFunction.AppendLines(sg.GetShaderString(0));
                 functionRegistry.builder.currentNode = null;
+                surfaceDescriptionFunction.currentNode = null;
 
                 if (rootNode is IMasterNode || rootNode is SubGraphOutputNode)
                 {
