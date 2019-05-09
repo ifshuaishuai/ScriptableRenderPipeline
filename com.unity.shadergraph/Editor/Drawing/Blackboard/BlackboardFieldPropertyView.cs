@@ -613,6 +613,7 @@ namespace UnityEditor.ShaderGraph.Drawing
                 if (property.precision == (Precision)evt.newValue)
                     return;
                 property.precision = (Precision)evt.newValue;
+                m_Graph.ValidateGraph();
                 precisionField.MarkDirtyRepaint();
                 DirtyNodes();
             });
