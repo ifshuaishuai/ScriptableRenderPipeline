@@ -160,7 +160,11 @@ namespace UnityEditor.ShaderGraph
         {
             get { return true; }
         }
-
+        
+        public override bool canSetPrecision
+        {
+            get { return false; }
+        }
 
         public void GenerateNodeCode(ShaderGenerator visitor, GraphContext graphContext, GenerationMode generationMode)
         {
