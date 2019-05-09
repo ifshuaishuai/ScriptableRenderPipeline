@@ -125,7 +125,7 @@ namespace UnityEditor.ShaderGraph
             if(!IsValidFunction())
                 return;
 
-            registry.ProvideFunction(functionName, builder =>
+            registry.ProvideFunction(functionName + concretePrecision.ToShaderString(), builder =>
             {
                 switch (sourceType)
                 {
