@@ -94,7 +94,7 @@ namespace UnityEditor.ShaderGraph
                     GetVariableNameForNode(),
                     NodeUtils.GetHLSLSafeName(argument.shaderOutputName));
 
-            string call = string.Format("{0}_$precision(", functionName);
+            string call = $"{functionName}_$precision(";
             bool first = true;
 
             slots.Clear();
@@ -114,7 +114,7 @@ namespace UnityEditor.ShaderGraph
                 if (!first)
                     call += ", ";
                 first = false;
-                call += GetVariableNameForSlot(argument.id);
+                call += $"_{GetVariableNameForNode()}_{NodeUtils.GetHLSLSafeName(argument.shaderOutputName)}";
             }
             call += ");";
             visitor.AddShaderChunk(call, true);
@@ -125,7 +125,7 @@ namespace UnityEditor.ShaderGraph
             if(!IsValidFunction())
                 return;
 
-            registry.ProvideFunction(functionName + concretePrecision.ToShaderString(), builder =>
+            registry.ProvideFunction($"{functionName}_{concretePrecision.ToShaderString()}", builder =>
             {
                 switch (sourceType)
                 {
@@ -153,7 +153,7 @@ namespace UnityEditor.ShaderGraph
 
         private string GetFunctionHeader()
         {
-            string header = string.Format("void {0}_$precision(", functionName);
+            string header = $"void {functionName}_$precision(";
             var first = true;
             List<MaterialSlot> slots = new List<MaterialSlot>();
 
@@ -163,7 +163,7 @@ namespace UnityEditor.ShaderGraph
                 if (!first)
                     header += ", ";
                 first = false;
-                header += string.Format("{0} {1}", argument.concreteValueType.ToShaderString(), argument.shaderOutputName);
+                header += $"{argument.concreteValueType.ToShaderString()} {argument.shaderOutputName}";
             }
 
             slots.Clear();
@@ -173,7 +173,7 @@ namespace UnityEditor.ShaderGraph
                 if (!first)
                     header += ", ";
                 first = false;
-                header += string.Format("out {0} {1}", argument.concreteValueType.ToShaderString(), argument.shaderOutputName);
+                header += $"out {argument.concreteValueType.ToShaderString()} {argument.shaderOutputName}";
             }
             header += ")";
             return header;

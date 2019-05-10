@@ -169,13 +169,12 @@ namespace UnityEditor.ShaderGraph.Drawing
 
             m_NodeSettingsView = new NodeSettingsView();
             m_NodeSettingsView.visible = false;
-
             Add(m_NodeSettingsView);
 
             m_SettingsButton = new VisualElement {name = "settings-button"};
             m_SettingsButton.Add(new VisualElement { name = "icon" });
-            m_Settings = new VisualElement();
 
+            m_Settings = new VisualElement();
             AddDefaultSettings();
 
             // Add Node type specific settings
@@ -189,7 +188,7 @@ namespace UnityEditor.ShaderGraph.Drawing
                     UpdateSettingsExpandedState();
                 }));
 
-            if(m_Settings.childCount != 0)
+            if(m_Settings.childCount > 0)
             {
                 m_ButtonContainer = new VisualElement { name = "button-container" };
                 m_ButtonContainer.style.flexDirection = FlexDirection.Row;
@@ -341,9 +340,11 @@ namespace UnityEditor.ShaderGraph.Drawing
         void AddDefaultSettings()
         {
             PropertySheet ps = new PropertySheet();
+            bool hasDefaultSettings = false;
 
             if(node.canSetPrecision)
             {
+                hasDefaultSettings = true;
                 ps.Add(new PropertyRow(new Label("Precision")), (row) =>
                 {
                     row.Add(new EnumField(node.precision), (field) =>
@@ -361,7 +362,7 @@ namespace UnityEditor.ShaderGraph.Drawing
                 });
             }
 
-            if(ps.childCount > 1)
+            if(hasDefaultSettings)
                 m_Settings.Add(ps);
         }
 
