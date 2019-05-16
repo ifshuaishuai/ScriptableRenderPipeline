@@ -9,9 +9,9 @@ namespace UnityEditor.ShaderGraph.Drawing.Colors
         public string Title => "Category";
         public bool AllowCustom => false;
 
-        public Color? ProvideColorForNode(AbstractMaterialNode node)
+        public bool ProvideColorForNode(AbstractMaterialNode node, ref Color color)
         {
-            return null;
+            return false;
         }
 
         public bool ApplyClassForNodeToElement(AbstractMaterialNode node, VisualElement el)

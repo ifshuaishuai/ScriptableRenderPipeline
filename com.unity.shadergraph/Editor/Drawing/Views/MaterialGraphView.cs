@@ -176,6 +176,7 @@ namespace UnityEditor.ShaderGraph.Drawing
 
         void ChangeCustomNodeColor(DropdownMenuAction menuAction)
         {
+            // Color Picker is internal :(
             var t = typeof(EditorWindow).Assembly.GetTypes().FirstOrDefault(ty => ty.Name == "ColorPicker");
             var m = t?.GetMethod("Show", new[] {typeof(Action<Color>), typeof(Color), typeof(bool), typeof(bool)});
             if (m == null)

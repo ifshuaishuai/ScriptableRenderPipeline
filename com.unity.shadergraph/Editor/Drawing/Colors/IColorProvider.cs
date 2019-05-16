@@ -12,7 +12,7 @@ namespace UnityEditor.ShaderGraph.Drawing.Colors
 
         // If your color must be set programatically, return it here.
         // If your colors are in USS and set via classes, return null here.
-        Color? ProvideColorForNode(AbstractMaterialNode node);
+        bool ProvideColorForNode(AbstractMaterialNode node, ref Color color);
         
         // If your color is defined in USS and set via classes, set them on the element here and return true.
         // If your color must be set programatically, return false here.

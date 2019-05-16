@@ -182,9 +182,9 @@ namespace UnityEditor.ShaderGraph
         [SerializeField]
         CustomColorData m_CustomColors = new CustomColorData();
 
-        public Color? GetColor(string provider)
+        public bool TryGetColor(string provider, ref Color color)
         {
-            return m_CustomColors.Get(provider);
+            return m_CustomColors.TryGetColor(provider, out color);
         }
 
         public void ResetColor(string provider)
@@ -192,7 +192,7 @@ namespace UnityEditor.ShaderGraph
             m_CustomColors.Remove(provider);
         }
 
-        public void SetColor(string provider, Color? color)
+        public void SetColor(string provider, Color color)
         {
             m_CustomColors.Set(provider, color);
         }
