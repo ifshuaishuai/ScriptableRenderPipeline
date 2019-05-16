@@ -9,25 +9,15 @@ namespace UnityEditor.ShaderGraph.Drawing.Colors
         public bool AllowCustom => true;
 
         public UserColors() {}
-        
-        public UserColors(string title)
-        {
-            m_Title = title;
-        }
 
-        public void ChangeTitle(string newTitle)
-        {
-            m_Title = newTitle;
-        }
-        
         public string Title => m_Title;
 
-        public Color? GetColor(AbstractMaterialNode node)
+        public Color? ProvideColorForNode(AbstractMaterialNode node)
         {
             return node.GetColor(m_Title);
         }
 
-        public bool ApplyColorTo(AbstractMaterialNode node, VisualElement el)
+        public bool ApplyClassForNodeToElement(AbstractMaterialNode node, VisualElement el)
         {
             return false;
         }

@@ -144,7 +144,7 @@ namespace UnityEditor.ShaderGraph.Drawing
                             if (selectable is MaterialNodeView nodeView)
                             {
                                 nodeView.node.ResetColor(graph.colorProvider);
-                                editorView.colorManager.SetColor(nodeView);
+                                editorView.colorManager.UpdateNodeView(nodeView);
                             }
                         }
                     }, eventBase => DropdownMenuAction.Status.Normal);
@@ -199,7 +199,7 @@ namespace UnityEditor.ShaderGraph.Drawing
                     if(selectable is MaterialNodeView nodeView)
                     {
                         nodeView.node.SetColor(editorView.colorManager.activeProviderName, pickedColor);
-                        editorView.colorManager.SetColor(nodeView);
+                        editorView.colorManager.UpdateNodeView(nodeView);
                     }
                 }
             }

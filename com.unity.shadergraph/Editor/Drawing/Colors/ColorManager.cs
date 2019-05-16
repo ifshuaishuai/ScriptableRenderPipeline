@@ -28,12 +28,12 @@ namespace UnityEditor.ShaderGraph.Drawing.Colors
             }
         }
 
-        public ColorManager(string activeColors)
+        public ColorManager(string activeProvider)
         {
             m_Providers = new List<IColorProvider>();
 
-            if (string.IsNullOrEmpty(activeColors))
-                activeColors = DefaultProvider;
+            if (string.IsNullOrEmpty(activeProvider))
+                activeProvider = DefaultProvider;
 
             foreach (var colorType in TypeCache.GetTypesDerivedFrom<IColorProvider>())
             {
@@ -41,21 +41,21 @@ namespace UnityEditor.ShaderGraph.Drawing.Colors
                 m_Providers.Add(provider);
             }
             
-            m_Providers.Sort((p1, p2) =>  string.Compare(p1.Title, p2.Title, StringComparison.InvariantCulture));
-            activeIndex = m_Providers.FindIndex(provider => provider.Title == activeColors);
+            m_Providers.Sort((p1, p2) => string.Compare(p1.Title, p2.Title, StringComparison.InvariantCulture));
+            activeIndex = m_Providers.FindIndex(provider => provider.Title == activeProvider);
         }
 
-        public void SetColor(IShaderNodeView nodeView)
+        public void UpdateNodeView(IShaderNodeView nodeView)
         {
             var curProvider = m_Providers[m_ActiveIndex];
             nodeView.colorElement.ClearClassList();
-            if (curProvider.ApplyColorTo(nodeView.node, nodeView.colorElement))
+            if (curProvider.ApplyClassForNodeToElement(nodeView.node, nodeView.colorElement))
             {
                 nodeView.SetColor(null);
                 return;
             }
             
-            nodeView.SetColor(curProvider.GetColor(nodeView.node));
+            nodeView.SetColor(curProvider.ProvideColorForNode(nodeView.node));
         }
 
         public IEnumerable<string> providerNames

@@ -185,15 +185,11 @@ namespace UnityEditor.ShaderGraph.Drawing
                         UpdateSettingsExpandedState();
                     }));
 
-                // Remove this after updated to the correct API call has landed in trunk. ------------
                 m_ButtonContainer = new VisualElement { name = "button-container" };
                 m_ButtonContainer.style.flexDirection = FlexDirection.Row;
                 m_ButtonContainer.Add(m_SettingsButton);
                 m_ButtonContainer.Add(m_CollapseButton);
                 m_TitleContainer.Add(m_ButtonContainer);
-                // -----------------------------------------------------------------------------------
-                //titleButtonContainer.Add(m_SettingsButton);
-                //titleButtonContainer.Add(m_CollapseButton);
             }
         }
 

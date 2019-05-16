@@ -630,7 +630,7 @@ namespace UnityEditor.ShaderGraph.Drawing
                 var materialNodeView = new MaterialNodeView {userData = materialNode};
                 m_GraphView.AddElement(materialNodeView);
                 materialNodeView.Initialize(materialNode, m_PreviewManager, m_EdgeConnectorListener, graphView);
-                m_ColorManager.SetColor(materialNodeView);
+                m_ColorManager.UpdateNodeView(materialNodeView);
                 nodeView = materialNodeView;
             }
 
@@ -796,7 +796,7 @@ namespace UnityEditor.ShaderGraph.Drawing
         {
             foreach (var nodeView in m_GraphView.Query<MaterialNodeView>().ToList())
             {
-                m_ColorManager.SetColor(nodeView);
+                m_ColorManager.UpdateNodeView(nodeView);
             }
         }
 
