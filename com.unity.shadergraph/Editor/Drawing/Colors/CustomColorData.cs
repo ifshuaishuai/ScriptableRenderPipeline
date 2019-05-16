@@ -11,7 +11,8 @@ namespace UnityEditor.ShaderGraph.Drawing.Colors
         public string Key = String.Empty;
         public Color Value = Color.black;
 
-        public SerializableUserColor(KeyValuePair<string, Color?> pair) { Key = pair.Key; Value = pair.Value ?? Color.black; }
+        public SerializableUserColor(KeyValuePair<string, Color> pair) { Key = pair.Key; Value = pair.Value; }
+        
         // Empty constructor required by serialization system
         public SerializableUserColor() {  }
     }
@@ -20,17 +21,16 @@ namespace UnityEditor.ShaderGraph.Drawing.Colors
     public class CustomColorData : ISerializationCallbackReceiver
     {
         [NonSerialized]
-        Dictionary<string, Color?> m_CustomColors = new Dictionary<string, Color?>();
+        Dictionary<string, Color> m_CustomColors = new Dictionary<string, Color>();
         [SerializeField]
         List<SerializationHelper.JSONSerializedElement> m_SerializableColors = new List<SerializationHelper.JSONSerializedElement>();
 
-        public Color? Get(string provider)
+        public bool TryGetColor(string provider, out Color color)
         {
-            m_CustomColors.TryGetValue(provider, out var color);
-            return color;
+            return m_CustomColors.TryGetValue(provider, out color);
         }
         
-        public void Set(string provider, Color? color)
+        public void Set(string provider, Color color)
         {
             m_CustomColors[provider] = color;
         }
@@ -45,10 +45,7 @@ namespace UnityEditor.ShaderGraph.Drawing.Colors
             m_SerializableColors.Clear();
             foreach (var customColorKvp in m_CustomColors)
             {
-                if (customColorKvp.Value.HasValue)
-                {
-                    m_SerializableColors.Add(SerializationHelper.Serialize(new SerializableUserColor(customColorKvp)));
-                }
+                m_SerializableColors.Add(SerializationHelper.Serialize(new SerializableUserColor(customColorKvp)));
             }
         }
 

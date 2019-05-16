@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using UnityEngine;
 
 namespace UnityEditor.ShaderGraph.Drawing.Colors
 {
@@ -51,11 +52,19 @@ namespace UnityEditor.ShaderGraph.Drawing.Colors
             nodeView.colorElement.ClearClassList();
             if (curProvider.ApplyClassForNodeToElement(nodeView.node, nodeView.colorElement))
             {
-                nodeView.SetColor(null);
+                nodeView.ResetColor();
                 return;
             }
-            
-            nodeView.SetColor(curProvider.ProvideColorForNode(nodeView.node));
+
+            var color = Color.black;
+            if (curProvider.ProvideColorForNode(nodeView.node, ref color))
+            {
+                nodeView.SetColor(color);
+            }
+            else
+            {
+                nodeView.ResetColor();
+            }
         }
 
         public IEnumerable<string> providerNames

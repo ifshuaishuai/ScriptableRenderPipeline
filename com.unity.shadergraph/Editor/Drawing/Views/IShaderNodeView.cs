@@ -11,7 +11,8 @@ namespace UnityEditor.ShaderGraph
         Node gvNode { get; }
         AbstractMaterialNode node { get; }
         VisualElement colorElement { get; }
-        void SetColor(Color? newColor);
+        void SetColor(Color newColor);
+        void ResetColor();
         void UpdatePortInputTypes();
         void OnModified(ModificationScope scope);
     }

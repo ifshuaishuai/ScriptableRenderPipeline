@@ -12,9 +12,9 @@ namespace UnityEditor.ShaderGraph.Drawing.Colors
 
         public string Title => m_Title;
 
-        public Color? ProvideColorForNode(AbstractMaterialNode node)
+        public bool ProvideColorForNode(AbstractMaterialNode node, ref Color color)
         {
-            return node.GetColor(m_Title);
+            return node.TryGetColor(m_Title, ref color);
         }
 
         public bool ApplyClassForNodeToElement(AbstractMaterialNode node, VisualElement el)

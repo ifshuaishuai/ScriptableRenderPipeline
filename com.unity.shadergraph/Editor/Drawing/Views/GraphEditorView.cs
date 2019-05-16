@@ -154,7 +154,7 @@ namespace UnityEditor.ShaderGraph.Drawing
                         m_ColorManager.activeIndex = newIdx;
                         m_Graph.colorProvider = m_ColorManager.activeProviderName;
                         m_Graph.owner.isDirty = true;
-                        UpdateNodeColors();
+                        ChangeColorMode();
                     }
                     
                     EditorGUI.BeginChangeCheck();
@@ -792,7 +792,7 @@ namespace UnityEditor.ShaderGraph.Drawing
             }
         }
 
-        void UpdateNodeColors()
+        void ChangeColorMode()
         {
             foreach (var nodeView in m_GraphView.Query<MaterialNodeView>().ToList())
             {

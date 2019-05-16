@@ -226,10 +226,16 @@ namespace UnityEditor.ShaderGraph.Drawing
         }
 
         static readonly StyleColor noColor = new StyleColor(StyleKeyword.Null);
-        public void SetColor(Color? color)
+        public void SetColor(Color color)
         {
-            m_TitleContainer.style.borderColor = color ?? noColor;
+            m_TitleContainer.style.borderColor = color;
         }
+        
+        public void ResetColor()
+        {
+            m_TitleContainer.style.borderColor = noColor;
+        }
+
 
         public Color GetColor()
         {
