@@ -9,12 +9,12 @@ namespace UnityEditor.ShaderGraph.Drawing.Colors
         public string Title => "Category";
         public bool AllowCustom => false;
 
-        public Color? GetColor(AbstractMaterialNode node)
+        public Color? ProvideColorForNode(AbstractMaterialNode node)
         {
             return null;
         }
 
-        public bool ApplyColorTo(AbstractMaterialNode node, VisualElement el)
+        public bool ApplyClassForNodeToElement(AbstractMaterialNode node, VisualElement el)
         {
             if (!(node.GetType().GetCustomAttributes(typeof(TitleAttribute), false).FirstOrDefault() is TitleAttribute title))
                 return true;
