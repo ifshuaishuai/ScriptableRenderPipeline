@@ -148,7 +148,9 @@ namespace UnityEditor.ShaderGraph.Drawing
 
                     GUILayout.FlexibleSpace();
 
-                    var newIdx = EditorGUILayout.Popup("Color Mode:", m_ColorManager.activeIndex, colorProviders);
+                    GUILayout.Label("Color Mode");
+                    var newIdx = EditorGUILayout.Popup(m_ColorManager.activeIndex, colorProviders, GUILayout.Width(100f));
+                    GUILayout.Space(4);
                     if(newIdx != m_ColorManager.activeIndex)
                     {
                         m_ColorManager.activeIndex = newIdx;
