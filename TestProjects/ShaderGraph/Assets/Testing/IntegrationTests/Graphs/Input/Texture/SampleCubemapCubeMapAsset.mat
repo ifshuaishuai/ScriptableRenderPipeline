@@ -24,5 +24,9 @@ Material:
         m_Texture: {fileID: 8900000, guid: f7111c407ddfe4109af9703cb740eaf9, type: 3}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
+    - _CubemapAsset_C7CE92A7_Out_0:
+        m_Texture: {fileID: 8900000, guid: f7111c407ddfe4109af9703cb740eaf9, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
     m_Floats: []
     m_Colors: []

@@ -28,5 +28,9 @@ Material:
         m_Texture: {fileID: 2800000, guid: 17c8e6ca2c91eba44aa7c73b1ee3002e, type: 3}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
+    - _SampleTexture2D_DEDAC414_Texture_1:
+        m_Texture: {fileID: 2800000, guid: 17c8e6ca2c91eba44aa7c73b1ee3002e, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
     m_Floats: []
     m_Colors: []
