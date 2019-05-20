@@ -3,23 +3,17 @@ using UnityEngine.UIElements;
 
 namespace UnityEditor.ShaderGraph.Drawing.Colors
 {
-    class UserColors : IColorProvider 
+    class UserColors : ColorProviderFromCode 
     {
         string m_Title = "User Defined";
-        public bool AllowCustom => true;
+        public override string GetTitle() => m_Title;
 
-        public UserColors() {}
+        public override bool AllowCustom() => true;
 
-        public string Title => m_Title;
-
-        public bool ProvideColorForNode(AbstractMaterialNode node, ref Color color)
+        protected override bool GetColorFromNode(AbstractMaterialNode node, out Color color)
         {
+            color = Color.black;
             return node.TryGetColor(m_Title, ref color);
-        }
-
-        public bool ApplyClassForNodeToElement(AbstractMaterialNode node, VisualElement el)
-        {
-            return false;
         }
     }
 }

@@ -153,10 +153,9 @@ namespace UnityEditor.ShaderGraph.Drawing
                     GUILayout.Space(4);
                     if(newIdx != m_ColorManager.activeIndex)
                     {
-                        m_ColorManager.activeIndex = newIdx;
+                        m_ColorManager.SetActiveProvider(newIdx, m_GraphView.Query<MaterialNodeView>().ToList());
                         m_Graph.colorProvider = m_ColorManager.activeProviderName;
                         m_Graph.owner.isDirty = true;
-                        ChangeColorMode();
                     }
                     
                     EditorGUI.BeginChangeCheck();
@@ -791,14 +790,6 @@ namespace UnityEditor.ShaderGraph.Drawing
                         }
                     }
                 }
-            }
-        }
-
-        void ChangeColorMode()
-        {
-            foreach (var nodeView in m_GraphView.Query<MaterialNodeView>().ToList())
-            {
-                m_ColorManager.UpdateNodeView(nodeView);
             }
         }
 
