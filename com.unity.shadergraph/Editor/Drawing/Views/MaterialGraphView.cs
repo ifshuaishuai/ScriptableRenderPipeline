@@ -139,6 +139,7 @@ namespace UnityEditor.ShaderGraph.Drawing
 
                     evt.menu.AppendAction("Color/Reset", menuAction =>
                     {
+                        graph.owner.RegisterCompleteObjectUndo("Reset Node Color");
                         foreach (var selectable in selection)
                         {
                             if (selectable is MaterialNodeView nodeView)
@@ -204,7 +205,7 @@ namespace UnityEditor.ShaderGraph.Drawing
                     }
                 }
             }
-
+            graph.owner.RegisterCompleteObjectUndo("Change Node Color");
             m.Invoke(null, new object[] {(Action<Color>) ApplyColor, defaultColor, true, false});
         }
 
