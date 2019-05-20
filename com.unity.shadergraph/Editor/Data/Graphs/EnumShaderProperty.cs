@@ -10,6 +10,7 @@ namespace UnityEditor.ShaderGraph
     enum EnumType
     {
         Enum,
+        CSharpEnum,
         KeywordEnum
     }
 
@@ -46,6 +47,9 @@ namespace UnityEditor.ShaderGraph
         [SerializeField]
         List<int> m_EnumValues = new List<int>();
 
+        [SerializeField]
+        Type m_CSharpEnumType;
+
         public List<string> enumNames
         {
             get => m_EnumNames;
@@ -56,6 +60,12 @@ namespace UnityEditor.ShaderGraph
         {
             get => m_EnumValues;
             set => m_EnumValues = value;
+        }
+
+        public Type cSharpEnumType
+        {
+            get => m_CSharpEnumType;
+            set => m_CSharpEnumType = value;
         }
         
         [SerializeField]
@@ -76,20 +86,27 @@ namespace UnityEditor.ShaderGraph
             }
 
             string enumValuesString = ""; // TODO
-            if (enumType == EnumType.KeywordEnum)
+            string enumTypeString = enumType.ToString();
+            switch (enumType)
             {
-                enumValuesString = enumNames.Aggregate((s, e) => s + ", " + e);
-            }
-            else
-            {
-                for (int i = 0; i < enumNames.Count; i++)
-                {
-                    int value = (i < enumValues.Count) ? enumValues[i] : i;
-                    enumValuesString += (enumNames[i] + ", " + value + ((i != enumNames.Count - 1) ? ", " : ""));
-                }
+                case EnumType.CSharpEnum:
+                    enumValuesString = m_CSharpEnumType.ToString();
+                    enumTypeString = "Enum";
+                    break;
+                case EnumType.KeywordEnum:
+                    enumValuesString = enumNames.Aggregate((s, e) => s + ", " + e);
+                    break;
+                default:
+                case EnumType.Enum:
+                    for (int i = 0; i < enumNames.Count; i++)
+                    {
+                        int value = (i < enumValues.Count) ? enumValues[i] : i;
+                        enumValuesString += (enumNames[i] + ", " + value + ((i != enumNames.Count - 1) ? ", " : ""));
+                    }
+                    break;
             }
             
-            result.Append($"[{enumType}({enumValuesString})] {referenceName}(\"{displayName}\", Float) = {NodeUtils.FloatToShaderValue(value)}");
+            result.Append($"[{enumTypeString}({enumValuesString})] {referenceName}(\"{displayName}\", Float) = {NodeUtils.FloatToShaderValue(value)}");
 
             return result.ToString();
         }
