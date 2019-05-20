@@ -3,20 +3,19 @@ using UnityEngine.UIElements;
 
 namespace UnityEditor.ShaderGraph.Drawing.Colors
 {
-    class NoColors : IColorProvider
+    internal class NoColors : IColorProvider
     {
         public static string NoColorTitle = "<None>";
-        public string Title => NoColorTitle;
-        public bool AllowCustom => false;
+        public string GetTitle() => NoColorTitle;
 
-        public bool ProvideColorForNode(AbstractMaterialNode node, ref Color color)
+        public bool AllowCustom() => false;
+
+        public void ApplyColor(IShaderNodeView nodeView)
         {
-            return false;
         }
 
-        public bool ApplyClassForNodeToElement(AbstractMaterialNode node, VisualElement el)
+        public void ClearColor(IShaderNodeView nodeView)
         {
-            return true;
         }
     }
 }

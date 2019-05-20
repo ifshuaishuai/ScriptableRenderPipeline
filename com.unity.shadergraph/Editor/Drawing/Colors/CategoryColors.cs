@@ -1,31 +1,25 @@
+using System;
 using System.Linq;
 using UnityEngine;
 using UnityEngine.UIElements;
 
 namespace UnityEditor.ShaderGraph.Drawing.Colors
 {
-    class CategoryColors : IColorProvider
+    class CategoryColors : ColorProviderFromStyleSheet
     {
-        public string Title => "Category";
-        public bool AllowCustom => false;
+        public override string GetTitle() => "Category";
 
-        public bool ProvideColorForNode(AbstractMaterialNode node, ref Color color)
-        {
-            return false;
-        }
+        public override bool AllowCustom() => false;
 
-        public bool ApplyClassForNodeToElement(AbstractMaterialNode node, VisualElement el)
+        protected override bool GetClassFromNode(AbstractMaterialNode node, out string ussClass)
         {
+            ussClass = string.Empty;
             if (!(node.GetType().GetCustomAttributes(typeof(TitleAttribute), false).FirstOrDefault() is TitleAttribute title))
-                return true;
+                return false;
 
-            var cat = title.title[0];
-            
-            if (string.IsNullOrEmpty(cat))
-                return true;
-            
-            el.AddToClassList(cat);
-            return true;
+            ussClass = title.title[0];
+
+            return !string.IsNullOrEmpty(ussClass);
         }
     }
 }

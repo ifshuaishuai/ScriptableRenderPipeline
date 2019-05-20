@@ -1,21 +1,66 @@
 using UnityEngine;
-using UnityEngine.UIElements;
 
 namespace UnityEditor.ShaderGraph.Drawing.Colors
 {
-    // Implement this to provide colors based on whatever factor you want
+    // Defines how the ColorManager interacts with various providers
     interface IColorProvider
     {
-        string Title { get; }
-        
-        bool AllowCustom { get; }
+        string GetTitle();
 
-        // If your color must be set programatically, return it here.
-        // If your colors are in USS and set via classes, return null here.
-        bool ProvideColorForNode(AbstractMaterialNode node, ref Color color);
-        
-        // If your color is defined in USS and set via classes, set them on the element here and return true.
-        // If your color must be set programatically, return false here.
-        bool ApplyClassForNodeToElement(AbstractMaterialNode node, VisualElement el);
+        bool AllowCustom();
+
+        void ApplyColor(IShaderNodeView nodeView);
+        void ClearColor(IShaderNodeView nodeView);
+    }
+
+    internal abstract class ColorProviderFromCode : IColorProvider
+    {
+        protected abstract bool GetColorFromNode(AbstractMaterialNode node, out Color color);
+
+        public abstract string GetTitle();
+
+        public abstract bool AllowCustom();
+
+        public virtual void ApplyColor(IShaderNodeView nodeView)
+        {
+            if (GetColorFromNode(nodeView.node, out var color))
+            {
+                nodeView.SetColor(color);
+            }
+            else
+            {
+                nodeView.ResetColor();
+            }
+        }
+
+        public virtual void ClearColor(IShaderNodeView nodeView)
+        {
+            nodeView.ResetColor();
+        }
+    }
+
+    internal abstract class ColorProviderFromStyleSheet : IColorProvider
+    {
+        protected abstract bool GetClassFromNode(AbstractMaterialNode node, out string ussClass);
+
+        public abstract string GetTitle();
+
+        public abstract bool AllowCustom();
+
+        public virtual void ApplyColor(IShaderNodeView nodeView)
+        {
+            if (GetClassFromNode(nodeView.node, out var ussClass))
+            {
+                nodeView.colorElement.AddToClassList(ussClass);
+            }
+        }
+
+        public virtual void ClearColor(IShaderNodeView nodeView)
+        {
+            if (GetClassFromNode(nodeView.node, out var ussClass))
+            {
+                nodeView.colorElement.RemoveFromClassList(ussClass);
+            }
+        }
     }
 }
