@@ -4,7 +4,21 @@ All notable changes to this package will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
-## [6.7.0-preview] - 2019-XX-XX
+## [7.0.0-preview] - 2019-XX-XX
+
+### Added
+- `Fixed`, `Viewer`, and `Automatic` modes to compute the FOV used when rendering a `PlanarReflectionProbe`
+- A checkbox to toggle the chrome gizmo of `ReflectionProbe`and `PlanarReflectionProbe`
+
+### Fixed
+- Fixed an issue with history buffers causing effects like TAA or auto exposure to flicker when more than one camera was visible in the editor
+- The correct preview is displayed when selecting multiple `PlanarReflectionProbe`s
+- Fixed volumetric rendering with camera-relative code and XR stereo instancing
+
+### Changed
+- Optimization: Reduce the group size of the deferred lighting pass from 16x16 to 8x8
+
+## [6.7.0-preview] - 2019-05-16
 
 ### Added
 - Added ViewConstants StructuredBuffer to simplify XR rendering
@@ -66,6 +80,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - Fixed synchronization issue in decal HTile that occasionally caused rendering artifacts around decal borders
 - Fixed QualitySettings getting marked as modified by HDRP (and thus checked out in Perforce)
 - Fixed a bug with uninitialized values in light explorer
+- Fixed issue with LOD transition
+- Fixed shader warnings related to raytracing and TEXTURE2D_X
 
 ### Changed
 - Refactor PixelCoordToViewDirWS to be VR compatible and to compute it only once per frame
@@ -85,6 +101,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - Apply decal projector fade factor correctly on all attribut and for shader graph decal
 - Move RenderTransparentDepthPostpass after all transparent
 - Update exposure prepass to interleave XR single-pass instancing views in a checkerboard pattern
+- Removed ScriptRuntimeVersion check in wizard.
 
 ## [6.6.0-preview] - 2019-04-01
 
