@@ -1,17 +1,16 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using UnityEngine;
 
 namespace UnityEditor.ShaderGraph.Drawing.Colors
 {
     // Use this to set colors on your node titles.
     // There are 2 methods of setting colors - direct Color objects via code (such as data saved in the node itself),
     // or setting classes on a VisualElement, allowing the colors themselves to be defined in USS. See notes on
-    // ColorProvider for how to use these different methods.
+    // IColorProvider for how to use these different methods.
     class ColorManager
     {
-        static string DefaultProvider = NoColors.NoColorTitle;
+        static string DefaultProvider = NoColors.Title;
     
         List<IColorProvider> m_Providers;
         
@@ -19,7 +18,7 @@ namespace UnityEditor.ShaderGraph.Drawing.Colors
         public int activeIndex
         {
             get => m_ActiveIndex;
-            set
+            private set
             {
                 if (!IsValidIndex(value))
                     return;

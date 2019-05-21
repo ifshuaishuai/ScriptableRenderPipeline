@@ -144,7 +144,7 @@ namespace UnityEditor.ShaderGraph.Drawing
                         {
                             if (selectable is MaterialNodeView nodeView)
                             {
-                                nodeView.node.ResetColor(graph.colorProvider);
+                                nodeView.node.ResetColor(editorView.colorManager.activeProviderName);
                                 editorView.colorManager.UpdateNodeView(nodeView);
                             }
                         }
