@@ -9,7 +9,7 @@ This repository and its documentation is under active development. Everything is
 
 ## Contents
 * [Getting Started](Getting-Started.md)
-   * [Custom Nodes with CodeFunctionNode](Custom-Nodes-With-CodeFunctionNode.md)
+   * [Custom Functions with Custom Function Node](Custom-Function-Node.md)
 * [Shader Graph](Shader-Graph.md)
    * [Shader Graph Window](Shader-Graph-Window.md)
    * [Blackboard](Blackboard.md)
@@ -17,8 +17,8 @@ This repository and its documentation is under active development. Everything is
    * [Create Node Menu](Create-Node-Menu.md)
    * [Shader Graph Asset](Shader-Graph-Asset.md)
    * [Precision Modes](Precision-Modes.md)
-* [Sub-graph](Sub-graph.md)
-   * [Sub-graph Asset](Sub-graph-Asset.md)
+* [Sub Graph](Sub-graph.md)
+   * [Sub Graph Asset](Sub-graph-Asset.md)
 * [Node](Node.md)
    * [Port](Port.md)
    * [Edge](Edge.md)
