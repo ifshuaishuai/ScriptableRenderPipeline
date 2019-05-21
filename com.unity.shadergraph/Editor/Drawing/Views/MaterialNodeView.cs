@@ -40,7 +40,7 @@ namespace UnityEditor.ShaderGraph.Drawing
         public void Initialize(AbstractMaterialNode inNode, PreviewManager previewManager, IEdgeConnectorListener connectorListener, GraphView graphView)
         {
             styleSheets.Add(Resources.Load<StyleSheet>("Styles/MaterialNodeView"));
-            styleSheets.Add(Resources.Load<StyleSheet>($"Styles/{ColorManager.StyleFile}"));
+            styleSheets.Add(Resources.Load<StyleSheet>($"Styles/ColorMode"));
             AddToClassList("MaterialNode");
 
             if (inNode == null)
@@ -165,7 +165,6 @@ namespace UnityEditor.ShaderGraph.Drawing
             m_PortInputContainer.SendToBack();
 
             m_TitleContainer = this.Q("title");
-            // -----------------------------------------------------------------------------------
 
             var settings = node as IHasSettings;
             if (settings != null)
@@ -239,7 +238,7 @@ namespace UnityEditor.ShaderGraph.Drawing
 
         public Color GetColor()
         {
-            return m_TitleContainer.style.borderColor.value;
+            return m_TitleContainer.resolvedStyle.borderColor;
         }
 
         void OnGeometryChanged(GeometryChangedEvent evt)

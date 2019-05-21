@@ -11,7 +11,6 @@ namespace UnityEditor.ShaderGraph.Drawing.Colors
     // ColorProvider for how to use these different methods.
     class ColorManager
     {
-        public static string StyleFile = "ColorMode"; 
         static string DefaultProvider = NoColors.NoColorTitle;
     
         List<IColorProvider> m_Providers;
@@ -51,40 +50,29 @@ namespace UnityEditor.ShaderGraph.Drawing.Colors
             if (newIndex == activeIndex || !IsValidIndex(newIndex))
                 return;
             
-            var oldProvider = curProvider;
+            var oldProvider = activeProvider;
             activeIndex = newIndex;
 
             foreach (var view in nodeViews)
             {
                 oldProvider.ClearColor(view);
-                curProvider.ApplyColor(view);
+                activeProvider.ApplyColor(view);
             }
         }
+        
         public void UpdateNodeView(IShaderNodeView nodeView)
         {
-            curProvider.ApplyColor(nodeView);
+            activeProvider.ApplyColor(nodeView);
         }
 
-        public IEnumerable<string> providerNames
-        {
-            get => m_Providers.Select(p => p.GetTitle());
-        }
+        public IEnumerable<string> providerNames => m_Providers.Select(p => p.GetTitle());
 
-        public string activeProviderName
-        {
-            get => curProvider.GetTitle();
-        }
+        public string activeProviderName => activeProvider.GetTitle();
 
-        public bool activeSupportsCustom
-        {
-            get => curProvider.AllowCustom();
-        }
+        public bool activeSupportsCustom => activeProvider.AllowCustom();
 
-        IColorProvider curProvider => m_Providers[activeIndex];
+        IColorProvider activeProvider => m_Providers[activeIndex];
         
-        bool IsValidIndex(int index)
-        {
-            return index >= 0 && index < m_Providers.Count;
-        }
+        bool IsValidIndex(int index) => index >= 0 && index < m_Providers.Count;
     }
 }
