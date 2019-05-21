@@ -13,12 +13,11 @@ See [Precision Types](Precision-Types.md) for type options.
 |------:|------------|
 | Float | Sets the precision mode to `float`. |
 | Half | Sets the precision mode to `half`. |
-| Real | Sets the precision more to `real`. |
 | Inherit | Sets the precision mode to `inherit`. <br> See **Precision Inheritance** below. Only available on nodes. |
 
 ## Using Precision Modes
 ### Graph Precision 
-Using the drop down menu in the top left corner of the [Shader Graph Window](Shader-Graph-Window.md), the precision for the entire graph can be set to `float`, `half`, or `real`. By default, new nodes created will use the precision set in this drop down menu.
+Using the drop down menu in the top left corner of the [Shader Graph Window](Shader-Graph-Window.md), the precision for the entire graph can be set to `float` or `half`. By default, new nodes created will use the precision set in this drop down menu.
 
 ### Node Precision 
 Each node can set its own precision using the gear icon menu. The precision type will cast itself up or down as data flows through the graph based on the precision set on each node. 

@@ -8,8 +8,6 @@
         {
             switch(precision)
             {
-                case ConcretePrecision.Real:
-                    return "real";
                 case ConcretePrecision.Float:
                     return "float";
                 case ConcretePrecision.Half:
@@ -23,8 +21,6 @@
         {
             switch(precision)
             {
-                case Precision.Real:
-                    return ConcretePrecision.Real;
                 case Precision.Float:
                     return ConcretePrecision.Float;
                 case Precision.Half:

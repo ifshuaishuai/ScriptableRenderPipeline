@@ -46,19 +46,6 @@ namespace UnityEditor.ShaderGraph.UnitTests
         }
 
         [Test]
-        public void CanSetNodeToReal()
-        {
-            m_Graph.ValidateGraph();
-
-            string testName = System.Reflection.MethodBase.GetCurrentMethod().Name;
-            PreviewNode testNode;
-            if(!m_TestNodes.TryGetValue(testName, out testNode))
-                throw new Exception($"Failed to find test node for {testName}");
-
-            Assert.AreEqual(ConcretePrecision.Real, testNode.concretePrecision);
-        }
-
-        [Test]
         public void CanSetNodeToHalf()
         {
             m_Graph.ValidateGraph();
@@ -85,19 +72,6 @@ namespace UnityEditor.ShaderGraph.UnitTests
         }
 
         [Test]
-        public void CanCastToReal()
-        {
-            m_Graph.ValidateGraph();
-
-            string testName = System.Reflection.MethodBase.GetCurrentMethod().Name;
-            PreviewNode testNode;
-            if(!m_TestNodes.TryGetValue(testName, out testNode))
-                throw new Exception($"Failed to find test node for {testName}");
-
-            Assert.AreEqual(ConcretePrecision.Real, testNode.concretePrecision);
-        }
-
-        [Test]
         public void CanCastToHalf()
         {
             m_Graph.ValidateGraph();
@@ -121,19 +95,6 @@ namespace UnityEditor.ShaderGraph.UnitTests
                 throw new Exception($"Failed to find test node for {testName}");
 
             Assert.AreEqual(ConcretePrecision.Float, testNode.concretePrecision);
-        }
-
-        [Test]
-        public void CanSetPropToReal()
-        {
-            m_Graph.ValidateGraph();
-
-            string testName = System.Reflection.MethodBase.GetCurrentMethod().Name;
-            PreviewNode testNode;
-            if(!m_TestNodes.TryGetValue(testName, out testNode))
-                throw new Exception($"Failed to find test node for {testName}");
-
-            Assert.AreEqual(ConcretePrecision.Real, testNode.concretePrecision);
         }
 
         [Test]
