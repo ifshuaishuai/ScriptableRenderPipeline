@@ -20,7 +20,6 @@ namespace UnityEditor.ShaderGraph.Drawing.Colors
     [Serializable]
     public class CustomColorData : ISerializationCallbackReceiver
     {
-        [NonSerialized]
         Dictionary<string, Color> m_CustomColors = new Dictionary<string, Color>();
         [SerializeField]
         List<SerializationHelper.JSONSerializedElement> m_SerializableColors = new List<SerializationHelper.JSONSerializedElement>();
