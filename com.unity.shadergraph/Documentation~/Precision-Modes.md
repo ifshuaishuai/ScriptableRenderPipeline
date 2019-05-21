@@ -4,7 +4,7 @@
 
 ![](images/Precision_DropDown.png)
 
-Shader Graph has the capability to set specific precision data modes for optimization across different platforms. The precision can be set for the whole graph using the Precision drop down in the top right hand corner, or set per-node on the graph in the gear menu on each node. 
+Shader Graph has the capability to set specific precision data modes for optimization across different platforms. The precision can be set for the whole graph using the Precision drop down in the top left hand corner, or set per-node on the graph in the gear menu on each node. 
 
 See [Precision Types](Precision-Types.md) for type options. 
 
@@ -18,7 +18,7 @@ See [Precision Types](Precision-Types.md) for type options.
 
 ## Using Precision Modes
 ### Graph Precision 
-Using the drop down menu in the top right corner of the [Shader Graph Window](Shader-Graph-Window.md), the precision for the entire graph can be set to `float`, `half`, or `real`. By default, new nodes created will use the precision set in this drop down menu.
+Using the drop down menu in the top left corner of the [Shader Graph Window](Shader-Graph-Window.md), the precision for the entire graph can be set to `float`, `half`, or `real`. By default, new nodes created will use the precision set in this drop down menu.
 
 ### Node Precision 
 Each node can set its own precision using the gear icon menu. The precision type will cast itself up or down as data flows through the graph based on the precision set on each node. 
@@ -54,13 +54,13 @@ For example, if the **Graph Precision** is changed from `half` to `float`, but *
 ![](images/Precision_Inheritance_04.png)
 
 ### Sub Graph Precision 
-When working with precision inside of [Sub Graphs](Sub-graph.md), the graph and node behavior will be the same as precision in normal graphs. **Graph Precision** is set using the same drop down in the top right corner. **Node Precision** per node inside of the sub graph is set on each node in the same gear icon menu. 
+When working with precision inside of [Sub Graphs](Sub-graph.md), the graph and node behavior will be the same as precision in normal graphs. **Graph Precision** is set using the same drop down in the top left corner. **Node Precision** per node inside of the sub graph is set on each node in the same gear icon menu. 
 
 Precision for the **Sub Graph Output** is set on the **Output** node. This precision will apply to all output ports defined in the **Output** node of the sub graph. 
 
 ![](images/Precision_SubGraph_01.png)
 
-Precision for **Sub Graph Inputs** are set on the [Blackboard](Blackboard.md). Precision modes are set on each individual [Property](Property-Types.md). on the Blackboard of the sub graph. Properties that use the `inherit` option will inherit the precision set on the Sub Graph via the drop down menu in the top right corner. 
+Precision for **Sub Graph Inputs** are set on the [Blackboard](Blackboard.md). Precision modes are set on each individual [Property](Property-Types.md). on the Blackboard of the sub graph. Properties that use the `inherit` option will inherit the precision set on the Sub Graph via the drop down menu in the top left corner. 
 
 ![](images/Precision_SubGraph_02.png)
 

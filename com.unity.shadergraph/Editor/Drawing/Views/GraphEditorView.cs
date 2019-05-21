@@ -137,8 +137,6 @@ namespace UnityEditor.ShaderGraph.Drawing
                             showInProjectRequested();
                     }
 
-                    GUILayout.FlexibleSpace();
-
                     EditorGUI.BeginChangeCheck();
                     GUILayout.Label("Precision");
                     graph.concretePrecision = (ConcretePrecision)EditorGUILayout.EnumPopup(graph.concretePrecision, GUILayout.Width(100f));
@@ -149,6 +147,8 @@ namespace UnityEditor.ShaderGraph.Drawing
                         foreach (var node in graph.GetNodes<AbstractMaterialNode>())
                             node.Dirty(ModificationScope.Graph);
                     }
+
+                    GUILayout.FlexibleSpace();
 
                     EditorGUI.BeginChangeCheck();
                     m_ToggleSettings.isBlackboardVisible = GUILayout.Toggle(m_ToggleSettings.isBlackboardVisible, "Blackboard", EditorStyles.toolbarButton);
