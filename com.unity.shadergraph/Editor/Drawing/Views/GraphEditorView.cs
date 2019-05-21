@@ -24,10 +24,11 @@ namespace UnityEditor.ShaderGraph.Drawing
     }
 
     [Serializable]
-    class ToggleSettings
+    class UserViewSettings
     {
         public bool isBlackboardVisible = true;
         public bool isPreviewVisible = true;
+        public string colorProvider = NoColors.Title;
     }
 
     class GraphEditorView : VisualElement, IDisposable
@@ -48,8 +49,8 @@ namespace UnityEditor.ShaderGraph.Drawing
             get { return m_BlackboardProvider; }
         }
 
-        const string k_ToggleSettings = "UnityEditor.ShaderGraph.ToggleSettings";
-        ToggleSettings m_ToggleSettings;
+        const string k_UserViewSettings = "UnityEditor.ShaderGraph.ToggleSettings";
+        UserViewSettings m_UserViewSettings;
 
         const string k_FloatingWindowsLayoutKey = "UnityEditor.ShaderGraph.FloatingWindowsLayout2";
         FloatingWindowsLayout m_FloatingWindowsLayout;
@@ -96,13 +97,13 @@ namespace UnityEditor.ShaderGraph.Drawing
             styleSheets.Add(Resources.Load<StyleSheet>("Styles/GraphEditorView"));
             previewManager = new PreviewManager(graph, messageManager);
             previewManager.onPrimaryMasterChanged = OnPrimaryMasterChanged;
-            m_ColorManager = new ColorManager(graph.colorProvider);
 
-            string serializedToggle = EditorUserSettings.GetConfigValue(k_ToggleSettings);
-            if (!string.IsNullOrEmpty(serializedToggle))
+            var serializedSettings = EditorUserSettings.GetConfigValue(k_UserViewSettings);
+            if (!string.IsNullOrEmpty(serializedSettings))
             {
-                m_ToggleSettings = JsonUtility.FromJson<ToggleSettings>(serializedToggle);
+                m_UserViewSettings = JsonUtility.FromJson<UserViewSettings>(serializedSettings);
             }
+            m_ColorManager = new ColorManager(m_UserViewSettings.colorProvider);
 
             string serializedWindowLayout = EditorUserSettings.GetConfigValue(k_FloatingWindowsLayoutKey);
             if (!string.IsNullOrEmpty(serializedWindowLayout))
@@ -148,28 +149,27 @@ namespace UnityEditor.ShaderGraph.Drawing
 
                     GUILayout.FlexibleSpace();
 
-                    GUILayout.Label("Color Mode");
-                    var newIdx = EditorGUILayout.Popup(m_ColorManager.activeIndex, colorProviders, GUILayout.Width(100f));
-                    GUILayout.Space(4);
-                    if(newIdx != m_ColorManager.activeIndex)
-                    {
-                        m_ColorManager.SetActiveProvider(newIdx, m_GraphView.Query<MaterialNodeView>().ToList());
-                        m_Graph.colorProvider = m_ColorManager.activeProviderName;
-                        m_Graph.owner.isDirty = true;
-                    }
-                    
                     EditorGUI.BeginChangeCheck();
-                    m_ToggleSettings.isBlackboardVisible = GUILayout.Toggle(m_ToggleSettings.isBlackboardVisible, "Blackboard", EditorStyles.toolbarButton);
+                    GUILayout.Label("Color Mode");
+                    var newColorIdx = EditorGUILayout.Popup(m_ColorManager.activeIndex, colorProviders, GUILayout.Width(100f));
+                    GUILayout.Space(4);
+                    m_UserViewSettings.isBlackboardVisible = GUILayout.Toggle(m_UserViewSettings.isBlackboardVisible, "Blackboard", EditorStyles.toolbarButton);
 
                     GUILayout.Space(6);
 
-                    m_ToggleSettings.isPreviewVisible = GUILayout.Toggle(m_ToggleSettings.isPreviewVisible, "Main Preview", EditorStyles.toolbarButton);
+                    m_UserViewSettings.isPreviewVisible = GUILayout.Toggle(m_UserViewSettings.isPreviewVisible, "Main Preview", EditorStyles.toolbarButton);
                     if (EditorGUI.EndChangeCheck())
                     {
-                        m_MasterPreviewView.visible = m_ToggleSettings.isPreviewVisible;
-                        m_BlackboardProvider.blackboard.visible = m_ToggleSettings.isBlackboardVisible;
-                        string serializedToggleables = JsonUtility.ToJson(m_ToggleSettings);
-                        EditorUserSettings.SetConfigValue(k_ToggleSettings, serializedToggleables);
+                        if(newColorIdx != m_ColorManager.activeIndex)
+                        {
+                            m_ColorManager.SetActiveProvider(newColorIdx, m_GraphView.Query<MaterialNodeView>().ToList());
+                            m_UserViewSettings.colorProvider = m_ColorManager.activeProviderName;
+                        }
+                    
+                        m_MasterPreviewView.visible = m_UserViewSettings.isPreviewVisible;
+                        m_BlackboardProvider.blackboard.visible = m_UserViewSettings.isBlackboardVisible;
+                        var serializedViewSettings = JsonUtility.ToJson(m_UserViewSettings);
+                        EditorUserSettings.SetConfigValue(k_UserViewSettings, serializedViewSettings);
                     }
                     GUILayout.EndHorizontal();
                 });
@@ -192,12 +192,7 @@ namespace UnityEditor.ShaderGraph.Drawing
                 m_BlackboardProvider = new BlackboardProvider(graph);
                 m_GraphView.Add(m_BlackboardProvider.blackboard);
 
-                // Initialize toggle settings if it doesnt exist.
-                if (m_ToggleSettings == null)
-                {
-                    m_ToggleSettings = new ToggleSettings();
-                }
-                m_BlackboardProvider.blackboard.visible = m_ToggleSettings.isBlackboardVisible;
+                m_BlackboardProvider.blackboard.visible = m_UserViewSettings.isBlackboardVisible;
 
                 CreateMasterPreview();
 
@@ -240,7 +235,7 @@ namespace UnityEditor.ShaderGraph.Drawing
 
             masterPreviewViewDraggable.OnDragFinished += UpdateSerializedWindowLayout;
             m_MasterPreviewView.previewResizeBorderFrame.OnResizeFinished += UpdateSerializedWindowLayout;
-            m_MasterPreviewView.visible = m_ToggleSettings.isPreviewVisible;
+            m_MasterPreviewView.visible = m_UserViewSettings.isPreviewVisible;
         }
 
         void OnKeyDown(KeyDownEvent evt)

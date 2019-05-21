@@ -5,8 +5,8 @@ namespace UnityEditor.ShaderGraph.Drawing.Colors
 {
     internal class NoColors : IColorProvider
     {
-        public static string NoColorTitle = "<None>";
-        public string GetTitle() => NoColorTitle;
+        public const string Title = "<None>";
+        public string GetTitle() => Title;
 
         public bool AllowCustom() => false;
 
