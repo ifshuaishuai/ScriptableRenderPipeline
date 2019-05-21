@@ -4,14 +4,12 @@
     {
         Inherit,
         Float,
-        Real,
         Half,
     }
 
     public enum ConcretePrecision
     {  
         Float,
-        Real,
         Half,
     }
 }
