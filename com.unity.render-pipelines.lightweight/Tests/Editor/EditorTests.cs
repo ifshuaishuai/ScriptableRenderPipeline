@@ -1,4 +1,5 @@
 using NUnit.Framework;
+using UnityEditor.Rendering.LWRP;
 using UnityEngine;
 using UnityEngine.Rendering;
 using UnityEngine.Rendering.LWRP;
@@ -47,6 +48,14 @@ class EditorTests
         {
             GraphicsSettings.renderPipelineAsset = renderPipelineAsset;
         }
+    }
+
+    // Creates a RendererTemplate file without any errors.
+    [Test]
+    public void CreateRendererTemplateWithoutErrors()
+    {
+        NewRendererFeatureDropdownItem.CreateNewRendererFeature();
+        LogAssert.NoUnexpectedReceived();
     }
 
     // When creating LWRP all required resources should be initialized.
