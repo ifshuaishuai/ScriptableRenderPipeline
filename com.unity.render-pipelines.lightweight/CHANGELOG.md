@@ -4,7 +4,7 @@ All notable changes to this package will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
-## [7.0.0-preview] - 2019-XX-XX
+## [7.0.0] - 2019-XX-XX
 ### Added
 - Added a menu option to create a new `ScriptableRendererFeature` script. To do so in the Editor, click on Asset > Create > Rendering > Lightweight Render Pipeline > Renderer Feature.
 
@@ -12,17 +12,17 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - Updated `ScriptableRendererFeature` and `ScriptableRenderPass` API docs.
 
 ### Fixed
+- Fixed a case where built-in Shader time values could be out of sync with actual time. [case 1142495](https://fogbugz.unity3d.com/f/cases/1142495/)
 - Fixed NullReference exception caused when trying to add a ScriptableRendererFeature.
 
-## [6.7.0-preview] - 2019-05-16
+## [6.7.0] - 2019-05-16
 ### Added
 - Added SpeedTree Shaders.
 - Added two Shader Graph master nodes: Lit Sprite and Unlit Sprite. They only work with the 2D renderer.
+- Added documentation for the 2D renderer.
 
 ### Changed
 - The 2D renderer and Light2D component received a number of improvements and are now ready to try as experimental features.
-
-### Changed
 - Updated the [Feature Comparison Table](lwrp-builtin-feature-comparison.md) to reflect the current state of LWRP features.
 
 ### Fixed
