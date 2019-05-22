@@ -1,6 +1,7 @@
 using System;
 using System.Diagnostics;
 using System.Collections.Generic;
+using Unity.Collections;
 
 namespace UnityEngine.Rendering.LWRP
 {
@@ -67,6 +68,22 @@ namespace UnityEngine.Rendering.LWRP
         {
             get => m_ActiveRenderPassQueue;
         }
+
+        static class RenderPassBlock
+        {
+            // Executes render passes that are inputs to the main rendering
+            // but don't depend on camera state. They all render in monoscopic mode. f.ex, shadow maps.
+            public static readonly int BeforeRendering = 0;
+
+            // Main bulk of render pass execution. They required camera state to be properly set
+            // and when enabled they will render in stereo.
+            public static readonly int MainRendering = 1;
+
+            // Execute after Post-processing.
+            public static readonly int AfterRendering = 2;
+        }
+
+        const int k_RenderPassBlockCount = 3;
 
         List<ScriptableRenderPass> m_ActiveRenderPassQueue = new List<ScriptableRenderPass>(32);
         List<ScriptableRendererFeature> m_RendererFeatures = new List<ScriptableRendererFeature>(10);
@@ -173,10 +190,20 @@ namespace UnityEngine.Rendering.LWRP
             float smoothDeltaTime = Time.smoothDeltaTime;
             SetShaderTimeValues(time, deltaTime, smoothDeltaTime);
 
+            // Upper limits for each block. Each block will contains render passes with events below the limit.
+            NativeArray<RenderPassEvent> blockEventLimits = new NativeArray<RenderPassEvent>(k_RenderPassBlockCount, Allocator.Temp);
+            blockEventLimits[RenderPassBlock.BeforeRendering] = RenderPassEvent.BeforeRenderingPrepasses;
+            blockEventLimits[RenderPassBlock.MainRendering] = RenderPassEvent.AfterRenderingPostProcessing;
+            blockEventLimits[RenderPassBlock.AfterRendering] = (RenderPassEvent)Int32.MaxValue;
+
+            NativeArray<int> blockRanges = new NativeArray<int>(blockEventLimits.Length + 1, Allocator.Temp);
+            FillBlockRanges(blockEventLimits, blockRanges);
+            blockEventLimits.Dispose();
+
             // Before Render Block. This render blocks always execute in mono rendering.
             // Camera is not setup. Lights are not setup.
             // Used to render input textures like shadowmaps.
-            ExecuteBlock(RenderPassEvent.BeforeRendering, RenderPassEvent.BeforeRenderingPrepasses, context, ref renderingData);
+            ExecuteBlock(RenderPassBlock.BeforeRendering, blockRanges, context, ref renderingData);
 
             /// Configure shader variables and other unity properties that are required for rendering.
             /// * Setup Camera RenderTarget and Viewport
@@ -199,12 +226,12 @@ namespace UnityEngine.Rendering.LWRP
                 BeginXRRendering(context, camera);
 
             // In this block main rendering executes.
-            ExecuteBlock(RenderPassEvent.BeforeRenderingPrepasses, RenderPassEvent.AfterRenderingPostProcessing, context, ref renderingData);
+            ExecuteBlock(RenderPassBlock.MainRendering, blockRanges, context, ref renderingData);
 
             DrawGizmos(context, camera, GizmoSubset.PreImageEffects);
 
             // In this block after rendering drawing happens, e.g, post processing, video player capture.
-            ExecuteBlock(RenderPassEvent.AfterRenderingPostProcessing, (RenderPassEvent)Int32.MaxValue, context, ref renderingData);
+            ExecuteBlock(RenderPassBlock.AfterRendering, blockRanges, context, ref renderingData);
 
             if (stereoEnabled)
                 EndXRRendering(context, camera);
@@ -212,6 +239,7 @@ namespace UnityEngine.Rendering.LWRP
             DrawGizmos(context, camera, GizmoSubset.PostImageEffects);
 
             InternalFinishRendering(context);
+            blockRanges.Dispose();
         }
 
         /// <summary>
@@ -295,22 +323,14 @@ namespace UnityEngine.Rendering.LWRP
             m_ActiveRenderPassQueue.Clear();
         }
 
-        void ExecuteBlock(RenderPassEvent startEvent, RenderPassEvent endEvent,
+        void ExecuteBlock(int blockIndex, NativeArray<int> blockRanges,
             ScriptableRenderContext context, ref RenderingData renderingData, bool submit = false)
         {
-            // TODO: Ideally we want to compute the block indices once. This requires a little bit of
-            // reworking and testing. Meanwhile, to fix the allocation issues, we loop until the first
-            // render pass index of the block. Since there render pass count should be kept to sane levels
-            // the cost of looping here should be neglicible. Will do the pre-computed block indices in a next PR. 
-            int currIndex = 0;
-            while (m_ActiveRenderPassQueue[currIndex].renderPassEvent < startEvent)
-                currIndex++;
-
-            while (currIndex < m_ActiveRenderPassQueue.Count && m_ActiveRenderPassQueue[currIndex].renderPassEvent < endEvent)
+            int endIndex = blockRanges[blockIndex + 1];
+            for (int currIndex = blockRanges[blockIndex]; currIndex < endIndex; ++currIndex)
             {
                 var renderPass = m_ActiveRenderPassQueue[currIndex];
                 ExecuteRenderPass(context, renderPass, ref renderingData);
-                currIndex++;
             }
 
             if (submit)
@@ -442,6 +462,27 @@ namespace UnityEngine.Rendering.LWRP
             if (UnityEditor.Handles.ShouldRenderGizmos())
                 context.DrawGizmos(camera, gizmoSubset);
 #endif
+        }
+
+        // Fill in render pass indices for each block. End index is startIndex + 1.
+        void FillBlockRanges(NativeArray<RenderPassEvent> blockEventLimits, NativeArray<int> blockRanges)
+        {
+            int currRangeIndex = 0;
+            int currRenderPass = 0;
+            blockRanges[currRangeIndex++] = 0;
+
+            // For each block, it finds the first render pass index that has an event
+            // higher than the block limit.
+            for (int i = 0; i < blockEventLimits.Length - 1; ++i)
+            {
+                while (currRenderPass < m_ActiveRenderPassQueue.Count &&
+                    m_ActiveRenderPassQueue[currRenderPass].renderPassEvent < blockEventLimits[i])
+                    currRenderPass++;
+
+                blockRanges[currRangeIndex++] = currRenderPass;
+            }
+
+            blockRanges[currRangeIndex] = m_ActiveRenderPassQueue.Count;
         }
 
         void InternalFinishRendering(ScriptableRenderContext context)
