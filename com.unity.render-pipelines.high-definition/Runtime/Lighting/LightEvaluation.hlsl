@@ -50,7 +50,11 @@ float3 SampleAreaLightCookie(int cookieIndex, float4x3 L, float3 F)
     //          mix of up into right that needs to be subtracted from simple projection on right vector
     //
     float   u = (dot(hitPosition, right) - upRightMixing * v) * recSqLengthRight;
-    float2  hitUV = float2(u, v);
+    // Currently the texture happens to be reversed when comparing it to the area light emissive mesh itself. This needs
+    // Further investigation to solve the problem. So for the moment we simply decided to inverse the x coordinate of hitUV
+    // as a temporary solution
+    // TODO: Invesigate more!
+    float2  hitUV = float2(1.0 - u, v);
 
     // Assuming the original cosine lobe distribution Do is enclosed in a cone of 90° aperture,
     //  following the idea of orthogonal projection upon the area light's plane we find the intersection
@@ -184,7 +188,7 @@ void EvaluateLight_Directional(LightLoopContext lightLoopContext, PositionInputs
 
     // Transparents have no contact shadow information
 #ifndef _SURFACE_TYPE_TRANSPARENT
-    shadow = min(shadow, GetContactShadow(lightLoopContext, light.contactShadowIndex));
+    shadow = min(shadow, GetContactShadow(lightLoopContext, light.contactShadowMask));
 #endif
 
 #ifdef DEBUG_DISPLAY
@@ -339,7 +343,7 @@ void EvaluateLight_Punctual(LightLoopContext lightLoopContext, PositionInputs po
 
     // Transparents have no contact shadow information
 #ifndef _SURFACE_TYPE_TRANSPARENT
-    shadow = min(shadow, GetContactShadow(lightLoopContext, light.contactShadowIndex));
+    shadow = min(shadow, GetContactShadow(lightLoopContext, light.contactShadowMask));
 #endif
 
 #ifdef DEBUG_DISPLAY

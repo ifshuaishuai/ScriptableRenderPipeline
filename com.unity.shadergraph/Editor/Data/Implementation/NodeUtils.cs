@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using System.Text;
 using UnityEditor.ShaderGraph;
 using UnityEngine;
 
@@ -16,6 +17,8 @@ namespace UnityEditor.Graphing
 
     static class NodeUtils
     {
+        public static string docURL = "https://github.com/Unity-Technologies/ScriptableRenderPipeline/tree/master/com.unity.shadergraph/Documentation%7E/";
+
         public static void SlotConfigurationExceptionIfBadConfiguration(AbstractMaterialNode node, IEnumerable<int> expectedInputSlots, IEnumerable<int> expectedOutputSlots)
         {
             var missingSlots = new List<int>();
@@ -56,6 +59,15 @@ namespace UnityEditor.Graphing
 
             ListPool<ISlot>.Release(validSlots);
             return result;
+        }
+
+        public static string GetDuplicateSafeNameForSlot(AbstractMaterialNode node, int slotId, string name)
+        {
+            List<MaterialSlot> slots = new List<MaterialSlot>();
+            node.GetSlots(slots);
+
+            name = name.Trim();
+            return GraphUtil.SanitizeName(slots.Where(p => p.id != slotId).Select(p => p.RawDisplayName()), "{0} ({1})", name);
         }
 
         // CollectNodesNodeFeedsInto looks at the current node and calculates
@@ -117,6 +129,11 @@ namespace UnityEditor.Graphing
             }
             if (includeSelf == IncludeSelf.Include)
                 nodeList.Add(node);
+        }
+
+        public static string GetDocumentationString(AbstractMaterialNode node)
+        {
+            return $"{docURL}{node.name.Replace(" ", "-")}"+"-Node.md";
         }
 
         static Stack<MaterialSlot> s_SlotStack = new Stack<MaterialSlot>();
@@ -251,7 +268,7 @@ namespace UnityEditor.Graphing
                 case ConcreteSlotValueType.Texture3D:
                     return "Texture3D";
                 case ConcreteSlotValueType.Cubemap:
-                    return "Cubemap";
+                    return "TextureCube";
                 case ConcreteSlotValueType.Gradient:
                     return "Gradient";
                 case ConcreteSlotValueType.Matrix2:
@@ -271,7 +288,40 @@ namespace UnityEditor.Graphing
         {
             char[] arr = input.ToCharArray();
             arr = Array.FindAll<char>(arr, (c => (Char.IsLetterOrDigit(c))));
-            return new string(arr);
+            var safeName = new string(arr);
+            if (char.IsDigit(safeName[0]))
+            {
+                safeName = $"var{safeName}";
+            }
+            return safeName;
+        }
+
+        private static string GetDisplaySafeName(string input)
+        {
+            //strip valid display characters from slot name
+            //current valid characters are whitespace and ( ) _ separators
+            StringBuilder cleanName = new StringBuilder();
+            foreach (var c in input)
+            {
+                if (c != ' ' && c != '(' && c != ')' && c != '_')
+                    cleanName.Append(c);
+            }
+
+            return cleanName.ToString();
+        }
+
+        public static bool ValidateSlotName(string inName, out string errorMessage)
+        {
+            //check for invalid characters between display safe and hlsl safe name
+            if (GetDisplaySafeName(inName) != GetHLSLSafeName(inName))
+            {
+                errorMessage = "Slot name(s) found invalid character(s). Valid characters: A-Z, a-z, 0-9, _ ( ) ";
+                return true;
+            }
+
+            //if clean, return null and false
+            errorMessage = null;
+            return false;
         }
 
         public static string FloatToShaderValue(float value)

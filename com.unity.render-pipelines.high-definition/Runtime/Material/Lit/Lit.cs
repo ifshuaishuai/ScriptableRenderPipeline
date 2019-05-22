@@ -1,4 +1,5 @@
 using System;
+using UnityEngine.Experimental.Rendering.HDPipeline.Attributes;
 using UnityEngine.Rendering;
 
 namespace UnityEngine.Experimental.Rendering.HDPipeline
@@ -33,19 +34,25 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
             public uint materialFeatures;
 
             // Standard
+            [MaterialSharedPropertyMapping(MaterialSharedProperty.Albedo)]
             [SurfaceDataAttributes("Base Color", false, true)]
             public Vector3 baseColor;
             [SurfaceDataAttributes("Specular Occlusion")]
             public float specularOcclusion;
 
+            [MaterialSharedPropertyMapping(MaterialSharedProperty.Normal)]
             [SurfaceDataAttributes(new string[] {"Normal", "Normal View Space"}, true)]
             public Vector3 normalWS;
+
+            [MaterialSharedPropertyMapping(MaterialSharedProperty.Smoothness)]
             [SurfaceDataAttributes("Smoothness")]
             public float perceptualSmoothness;
 
+            [MaterialSharedPropertyMapping(MaterialSharedProperty.AmbientOcclusion)]
             [SurfaceDataAttributes("Ambient Occlusion")]
             public float ambientOcclusion;
 
+            [MaterialSharedPropertyMapping(MaterialSharedProperty.Metal)]
             [SurfaceDataAttributes("Metallic")]
             public float metallic;
 
@@ -55,12 +62,13 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
             // MaterialFeature dependent attribute
 
             // Specular Color
+            [MaterialSharedPropertyMapping(MaterialSharedProperty.Specular)]
             [SurfaceDataAttributes("Specular Color", false, true)]
             public Vector3 specularColor;
 
             // SSS
-            [SurfaceDataAttributes("Diffusion Profile")]
-            public uint diffusionProfile;
+            [SurfaceDataAttributes("Diffusion Profile Hash")]
+            public uint diffusionProfileHash;
             [SurfaceDataAttributes("Subsurface Mask")]
             public float subsurfaceMask;
 
@@ -125,7 +133,7 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
             // SpecularColor fold into fresnel0
 
             // SSS
-            public uint diffusionProfile;
+            public uint diffusionProfileIndex;
             public float subsurfaceMask;
 
             // Transmission
@@ -170,8 +178,8 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
         protected void GetGBufferOptions(HDRenderPipelineAsset asset, out int gBufferCount, out bool supportShadowMask, out bool supportLightLayers)
         {
             // Caution: This must be in sync with GBUFFERMATERIAL_COUNT definition in 
-            supportShadowMask = asset.renderPipelineSettings.supportShadowMask;
-            supportLightLayers = asset.renderPipelineSettings.supportLightLayers;
+            supportShadowMask = asset.currentPlatformRenderPipelineSettings.supportShadowMask;
+            supportLightLayers = asset.currentPlatformRenderPipelineSettings.supportLightLayers;
             gBufferCount = 4 + (supportShadowMask ? 1 : 0) + (supportLightLayers ? 1 : 0);
         }
 
@@ -208,7 +216,13 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
             enableWrite[2] = false;
             RTFormat[3] = Builtin.GetLightingBufferFormat();
             gBufferUsage[3] = GBufferUsage.None;
+
+            // If we are in raytracing mode and we want to have indirect diffuse active, we need to make sure that the gbuffer3 is writable
+            #if ENABLE_RAYTRACING
+            enableWrite[3] = true;
+            #else
             enableWrite[3] = false;
+            #endif
 
             int index = 4;
 

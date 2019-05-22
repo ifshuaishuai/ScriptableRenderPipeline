@@ -1,4 +1,5 @@
 using System;
+using UnityEngine.Serialization;
 
 namespace UnityEngine.Experimental.Rendering.HDPipeline
 {
@@ -8,15 +9,45 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
         [Serializable]
         public struct RenderData
         {
-            public Matrix4x4 worldToCameraRHS;
-            public Matrix4x4 projectionMatrix;
-            public Vector3 capturePosition;
+            [SerializeField, FormerlySerializedAs("worldToCameraRHS")]
+            Matrix4x4 m_WorldToCameraRHS;
+            [SerializeField, FormerlySerializedAs("projectionMatrix")]
+            Matrix4x4 m_ProjectionMatrix;
+            [SerializeField, FormerlySerializedAs("capturePosition")]
+            Vector3 m_CapturePosition;
+            Quaternion m_CaptureRotation;
+            float m_FieldOfView;
+
+            public Matrix4x4 worldToCameraRHS => m_WorldToCameraRHS;
+            public Matrix4x4 projectionMatrix => m_ProjectionMatrix;
+            public Vector3 capturePosition => m_CapturePosition;
+            public Quaternion captureRotation => m_CaptureRotation;
+            public float fieldOfView => m_FieldOfView;
 
             public RenderData(CameraSettings camera, CameraPositionSettings position)
+                : this(
+                    position.GetUsedWorldToCameraMatrix(),
+                    camera.frustum.GetUsedProjectionMatrix(),
+                    position.position,
+                    position.rotation,
+                    camera.frustum.fieldOfView
+                )
             {
-                worldToCameraRHS = position.GetUsedWorldToCameraMatrix();
-                projectionMatrix = camera.frustum.GetUsedProjectionMatrix();
-                capturePosition = position.position;
+            }
+
+            public RenderData(
+                Matrix4x4 worldToCameraRHS,
+                Matrix4x4 projectionMatrix,
+                Vector3 capturePosition,
+                Quaternion captureRotation,
+                float fov
+            )
+            {
+                m_WorldToCameraRHS = worldToCameraRHS;
+                m_ProjectionMatrix = projectionMatrix;
+                m_CapturePosition = capturePosition;
+                m_CaptureRotation = captureRotation;
+                m_FieldOfView = fov;
             }
         }
 
@@ -41,9 +72,31 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
         [SerializeField]
         RenderData m_CustomRenderData;
 
+        // Only used in editor, but this data needs to be probe instance specific
+        // (Contains: UI section states)
+        [SerializeField]
+        uint m_EditorOnlyData;
+
         // Runtime Data
         RenderTexture m_RealtimeTexture;
         RenderData m_RealtimeRenderData;
+        bool m_WasRenderedSinceLastOnDemandRequest;
+
+        internal bool requiresRealtimeUpdate
+        {
+            get
+            {
+                if (mode != ProbeSettings.Mode.Realtime)
+                    return false;
+                switch (realtimeMode)
+                {
+                    case ProbeSettings.RealtimeMode.EveryFrame: return true;
+                    case ProbeSettings.RealtimeMode.OnEnable: return !wasRenderedAfterOnEnable;
+                    case ProbeSettings.RealtimeMode.OnDemand: return !m_WasRenderedSinceLastOnDemandRequest;
+                    default: throw new ArgumentOutOfRangeException(nameof(realtimeMode));
+                }
+            }
+        }
 
         // Public API
         // Texture asset
@@ -140,7 +193,7 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
 
         // Camera
         /// <summary>Frame settings in use with this probe.</summary>
-        public FrameSettings frameSettings => m_ProbeSettings.camera.renderingPathCustomFrameSettings;
+        public ref FrameSettings frameSettings => ref m_ProbeSettings.camera.renderingPathCustomFrameSettings;
         public FrameSettingsOverrideMask frameSettingsOverrideMask => m_ProbeSettings.camera.renderingPathCustomFrameSettingsOverrideMask;
         internal Vector3 influenceExtents => influenceVolume.extents;
         internal Matrix4x4 proxyToWorld
@@ -166,8 +219,15 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
             }
         }
 
-        internal bool wasRenderedAfterOnEnable { get; set; } = false;
-        internal int lastRenderedFrame { get; set; } = int.MinValue;
+        internal bool wasRenderedAfterOnEnable { get; private set; } = false;
+        internal int lastRenderedFrame { get; private set; } = int.MinValue;
+
+        internal void SetIsRendered(int frame)
+        {
+            m_WasRenderedSinceLastOnDemandRequest = true;
+            wasRenderedAfterOnEnable = true;
+            lastRenderedFrame = frame;
+        }
 
         // API
         /// <summary>
@@ -175,6 +235,14 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
         /// You should call this method when you update the <see cref="influenceVolume"/> parameters during runtime.
         /// </summary>
         public virtual void PrepareCulling() { }
+
+        /// <summary>
+        /// Request to render this probe next update.
+        ///
+        /// Call this method with the mode <see cref="ProbeSettings.RealtimeMode.OnDemand"/> and the probe will
+        /// be rendered the next time it will influence a camera rendering.
+        /// </summary>
+        public void RequestRenderNextUpdate() => m_WasRenderedSinceLastOnDemandRequest = false;
 
         void OnEnable()
         {
@@ -189,7 +257,10 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
             HDProbeSystem.UnregisterProbe(this);
 
             if (isActiveAndEnabled)
+            {
+                PrepareCulling();
                 HDProbeSystem.RegisterProbe(this);
+            }
         }
     }
 }

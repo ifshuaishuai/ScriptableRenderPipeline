@@ -5,21 +5,18 @@ using UnityEditor.ShaderGraph.Drawing.Controls;
 
 namespace UnityEditor.ShaderGraph
 {
+    [FormerName("UnityEditor.ShaderGraph.BakedGAbstractMaterialNode")]
     [FormerName("UnityEditor.ShaderGraph.LightProbeNode")]
     [Title("Input", "Lighting", "Baked GI")]
-    class BakedGAbstractMaterialNode : CodeFunctionNode
+    class BakedGINode : CodeFunctionNode
     {
         public override bool hasPreview { get { return false; } }
 
-        public BakedGAbstractMaterialNode()
+        public BakedGINode()
         {
             name = "Baked GI";
         }
 
-        public override string documentationURL
-        {
-            get { return "https://github.com/Unity-Technologies/ShaderGraph/wiki/Baked-GI-Node"; }
-        }
 
         protected override MethodInfo GetFunctionToConvert()
         {

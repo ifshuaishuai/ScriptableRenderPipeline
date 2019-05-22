@@ -17,8 +17,11 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
     public class HDRaytracingLightCluster
     {
         // External data
-        HDRenderPipelineAsset m_RenderPipelineAsset = null;
+        RenderPipelineResources m_RenderPipelineResources = null;
+        HDRenderPipelineRayTracingResources m_RenderPipelineRayTracingResources = null;
         HDRaytracingManager m_RaytracingManager = null;
+        HDRenderPipeline m_RenderPipeline = null;
+        SharedRTManager m_SharedRTManager = null;
 
         // Light data
         LightVolume[] m_LightVolumesCPUArray = null;
@@ -61,14 +64,24 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
 
         }
 
-        public void Initialize(HDRenderPipelineAsset asset, HDRaytracingManager raytracingManager)
+        public void Initialize(RenderPipelineResources rpResources, HDRenderPipelineRayTracingResources rpRTResources, HDRaytracingManager raytracingManager, SharedRTManager sharedRTManager, HDRenderPipeline renderPipeline)
         {
             // Keep track of the external buffers
-            m_RenderPipelineAsset = asset;
+            m_RenderPipelineResources = rpResources;
+            m_RenderPipelineRayTracingResources = rpRTResources;
             m_RaytracingManager = raytracingManager;
-            
+
+            // Keep track of the render pipeline
+            m_RenderPipeline = renderPipeline;
+
+            // Keep track of the shader rt manager
+            m_SharedRTManager = sharedRTManager;
+
             // Texture used to output debug information
             m_DebugLightClusterTexture = RTHandles.Alloc(Vector2.one, filterMode: FilterMode.Point, colorFormat: GraphicsFormat.R16G16B16A16_SFloat, enableRandomWrite: true, useDynamicScale: true, useMipMap: false, name: "DebugLightClusterTexture");
+
+            // Pre allocate the cluster with a dummy size
+            m_LightCluster = new ComputeBuffer(1, sizeof(uint));
         }
 
         public void ReleaseResources()
@@ -103,14 +116,14 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
         void ResizeClusterBuffer(int bufferSize)
         {
             // Release the previous buffer
-            if(m_LightCluster != null)
+            if (m_LightCluster != null)
             {
                 CoreUtils.SafeRelease(m_LightCluster);
                 m_LightCluster = null;
             }
 
             // Allocate the next buffer buffer
-            if(bufferSize > 0)
+            if (bufferSize > 0)
             {
                 m_LightCluster = new ComputeBuffer(bufferSize, sizeof(uint));
             }
@@ -181,7 +194,9 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
             for (int lightIdx = 0; lightIdx < numLights; ++lightIdx)
             {
                 HDAdditionalLightData currentLight = lightArray[lightIdx];
-                if(currentLight != null)
+                // When the user deletes a light source in the editor, there is a single frame where the light is null before the collection of light in the scene is triggered
+                // the workaround for this is simply to not add it if it is null for that invalid frame
+                if (currentLight != null)
                 {
                     float lightRange = currentLight.gameObject.GetComponent<Light>().range;
                     m_LightVolumesCPUArray[lightIdx].range = lightRange;
@@ -274,7 +289,7 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
             {
                 // Make sure the Cluster buffer has the right size
                 int bufferSize = 64 * 64 * 32 * (currentEnv.maxNumLightsPercell + 3);
-                if (m_LightCluster == null || m_LightCluster.count != bufferSize)
+                if (m_LightCluster.count != bufferSize)
                 {
                     ResizeClusterBuffer(bufferSize);
                 }
@@ -364,7 +379,7 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
             }
         }
 
-        void BuildLightData(HDCamera hdCamera, List<HDAdditionalLightData> lightArray)
+        void BuildLightData(CommandBuffer cmd, HDCamera hdCamera, List<HDAdditionalLightData> lightArray)
         {
             // Also we need to build the light list data
             if (m_LightDataGPUArray == null || m_LightDataGPUArray.count != lightArray.Count)
@@ -375,8 +390,16 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
             // Build the data for every light
             for (int lightIdx = 0; lightIdx < lightArray.Count; ++lightIdx)
             {
-                // Get the light components
+                var lightData = new LightData();
+
                 HDAdditionalLightData additionalLightData = lightArray[lightIdx];
+                // When the user deletes a light source in the editor, there is a single frame where the light is null before the collection of light in the scene is triggered
+                // the workaround for this is simply to add an invalid light for that frame
+                if(additionalLightData == null)
+                {
+                    m_LightDataCPUArray[lightIdx] = lightData;
+                    continue;
+                }
                 Light light = additionalLightData.gameObject.GetComponent<Light>();
 
                 // Both of these positions are non-camera-relative.
@@ -388,8 +411,6 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
 
                 if (!contributesToLighting)
                     continue;
-
-                var lightData = new LightData();
 
                 lightData.lightLayers = additionalLightData.GetLightLayers();
                 LightCategory lightCategory = LightCategory.Count;
@@ -434,12 +455,10 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
                     }
                 }
 
-                Color finalColor = Mathf.CorrelatedColorTemperatureToRGB(light.colorTemperature);
-                GlobalIllumination.LinearColor converted = GlobalIllumination.LinearColor.Convert(light.color, light.intensity);
-                finalColor.r *= converted.red;
-                finalColor.g *= converted.green;
-                finalColor.b *= converted.blue;
-                lightData.color = new Vector3(finalColor.r, finalColor.g, finalColor.b) * light.intensity;
+                Color value = light.color.linear * light.intensity;
+                if (additionalLightData.useColorTemperature)
+                    value *= Mathf.CorrelatedColorTemperatureToRGB(light.colorTemperature);
+                lightData.color = new Vector3(value.r, value.g, value.b);
 
                 lightData.forward = light.transform.forward;
                 lightData.up = light.transform.up;
@@ -515,8 +534,34 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
                 lightData.specularDimmer = lightDistanceFade * (additionalLightData.affectSpecular ? additionalLightData.lightDimmer * hdCamera.frameSettings.specularGlobalDimmer : 0);
                 lightData.volumetricLightDimmer = lightDistanceFade * (additionalLightData.volumetricDimmer);
 
+                lightData.contactShadowMask = 0;
                 lightData.cookieIndex = -1;
                 lightData.shadowIndex = -1;
+                lightData.rayTracedAreaShadowIndex = -1;
+
+                if (light != null && light.cookie != null)
+                {
+                    // TODO: add texture atlas support for cookie textures.
+                    switch (light.type)
+                    {
+                        case LightType.Spot:
+                            lightData.cookieIndex = m_RenderPipeline.cookieTexArray.FetchSlice(cmd, light.cookie);
+                            break;
+                        case LightType.Point:
+                            lightData.cookieIndex = m_RenderPipeline.cubeCookieTexArray.FetchSlice(cmd, light.cookie);
+                            break;
+                    }
+                }
+                else if (light.type == LightType.Spot && additionalLightData.spotLightShape != SpotLightShape.Cone)
+                {
+                    // Projectors lights must always have a cookie texture.
+                    // As long as the cache is a texture array and not an atlas, the 4x4 white texture will be rescaled to 128
+                    lightData.cookieIndex = m_RenderPipeline.cookieTexArray.FetchSlice(cmd, Texture2D.whiteTexture);
+                }
+                else if (lightData.lightType == GPULightType.Rectangle && additionalLightData.areaLightCookie != null)
+                {
+                    lightData.cookieIndex = m_RenderPipeline.areaLightCookieManager.FetchSlice(cmd, additionalLightData.areaLightCookie);
+                }
 
                 {
                     lightData.shadowDimmer = 1.0f;
@@ -539,9 +584,6 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
                     lightData.nonLightMappedOnly = 0;
                 }
 
-                // No contact shadows for us
-                lightData.contactShadowIndex = -1;
-
                 // Set the data for this light
                 m_LightDataCPUArray[lightIdx]= lightData;
             }
@@ -550,12 +592,12 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
             m_LightDataGPUArray.SetData(m_LightDataCPUArray);
         }
 
-        void EvaluateClusterDebugView(CommandBuffer cmd, HDRaytracingEnvironment currentEnv)
+        void EvaluateClusterDebugView(CommandBuffer cmd, HDCamera hdCamera, HDRaytracingEnvironment currentEnv)
         {
-            ComputeShader lightClusterDebugCS = m_RenderPipelineAsset.renderPipelineResources.shaders.lightClusterDebugCS;
+            ComputeShader lightClusterDebugCS = m_RenderPipelineRayTracingResources.lightClusterDebugCS;
             if (lightClusterDebugCS == null) return;
 
-            Texture2D gradientTexture = m_RenderPipelineAsset.renderPipelineResources.textures.colorGradient;
+            Texture2D gradientTexture = m_RenderPipelineResources.textures.colorGradient;
             if (gradientTexture == null) return;
 
             // Grab the kernel
@@ -568,13 +610,14 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
             cmd.SetComputeVectorParam(lightClusterDebugCS, _ClusterCellSize, clusterCellSize);
             cmd.SetComputeFloatParam(lightClusterDebugCS, _LightPerCellCount, HDShadowUtils.Asfloat(currentEnv.maxNumLightsPercell));
             cmd.SetComputeTextureParam(lightClusterDebugCS, m_LightClusterDebugKernel, _DebugColorGradientTexture, gradientTexture);
+            cmd.SetComputeTextureParam(lightClusterDebugCS, m_LightClusterDebugKernel, HDShaderIDs._CameraDepthTexture, m_SharedRTManager.GetDepthStencilBuffer());
 
             // Target output texture
             cmd.SetComputeTextureParam(lightClusterDebugCS, m_LightClusterDebugKernel, _DebutLightClusterTexture, m_DebugLightClusterTexture);
 
             // Texture dimensions
-            int texWidth = m_DebugLightClusterTexture.rt.width;
-            int texHeight = m_DebugLightClusterTexture.rt.width;
+            int texWidth = hdCamera.actualWidth;
+            int texHeight = hdCamera.actualHeight;
 
             // Dispatch the compute
             int lightVolumesTileSize = 8;
@@ -620,16 +663,25 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
 
         public void EvaluateLightClusters(CommandBuffer cmd, HDCamera hdCamera, List<HDAdditionalLightData> lightArray)
         {
-            // If there is no area light to process, nothing to do here
-            if (lightArray.Count == 0)
-                return;
-
             // Grab the current ray-tracing environment, if no environment available stop right away
             HDRaytracingEnvironment currentEnv = m_RaytracingManager.CurrentEnvironment();
-            if (currentEnv == null) return;
+            ComputeShader lightClusterCS = m_RenderPipelineRayTracingResources.lightClusterBuildCS;
+            // If there is no area light to process or no environment not the shader is missing
+            if (currentEnv == null || lightClusterCS == null || lightArray.Count == 0)
+            {
+                // Invalidate the cluster's bounds so that we never access the buffer
+                minClusterPos.Set(float.MaxValue, float.MaxValue, float.MaxValue);
+                maxClusterPos.Set(-float.MaxValue, -float.MaxValue, -float.MaxValue);
+                punctualLightCount = 0;
+                areaLightCount = 0;
 
-            ComputeShader lightClusterCS = m_RenderPipelineAsset.renderPipelineResources.shaders.lightClusterBuildCS;
-            if (lightClusterCS == null) return;
+                // Make sure the buffer is at least of size 1
+                if (m_LightCluster.count != 1)
+                {
+                    ResizeClusterBuffer(1);
+                }
+                return;
+            }
 
             // Build the Light volumes
             BuildGPULightVolumes(lightArray);
@@ -644,10 +696,10 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
             BuildLightCluster(cmd, lightClusterCS, currentEnv, lightArray.Count);
 
             // Build the light data
-            BuildLightData(hdCamera, lightArray);
+            BuildLightData(cmd, hdCamera, lightArray);
 
             // Generate the debug view
-            EvaluateClusterDebugView(cmd, currentEnv);
+            EvaluateClusterDebugView(cmd, hdCamera, currentEnv);
         }
     }
 #endif

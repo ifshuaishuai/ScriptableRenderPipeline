@@ -35,7 +35,7 @@ namespace UnityEditor.Experimental.Rendering.HDPipeline
             [Optional]                                                              Vector4 texCoord2;
             [Optional]                                                              Vector4 texCoord3;
             [Optional]                                                              Vector4 color;
-            [Semantic("INSTANCEID_SEMANTIC")] [PreprocessorIf("UNITY_ANY_INSTANCING_ENABLED")]     uint instanceID;
+            [Semantic("CUSTOM_INSTANCE_ID")] [PreprocessorIf("UNITY_ANY_INSTANCING_ENABLED")] uint instanceID;
             [Optional][Semantic("FRONT_FACE_SEMANTIC")][OverrideType("FRONT_FACE_TYPE")][PreprocessorIf("SHADER_STAGE_FRAGMENT")] bool cullFace;
 
             public static Dependency[] tessellationDependencies = new Dependency[]
@@ -76,7 +76,7 @@ namespace UnityEditor.Experimental.Rendering.HDPipeline
             [Optional]      Vector4 texCoord2;
             [Optional]      Vector4 texCoord3;
             [Optional]      Vector4 color;
-            [Semantic("INSTANCEID_SEMANTIC")] [PreprocessorIf("UNITY_ANY_INSTANCING_ENABLED")] uint instanceID;
+            [Semantic("CUSTOM_INSTANCE_ID")] [PreprocessorIf("UNITY_ANY_INSTANCING_ENABLED")] uint instanceID;
 
             public static Dependency[] tessellationDependencies = new Dependency[]
             {
@@ -175,6 +175,8 @@ namespace UnityEditor.Experimental.Rendering.HDPipeline
                 new Dependency("SurfaceDescriptionInputs.uv3",                       "FragInputs.texCoord3"),
                 new Dependency("SurfaceDescriptionInputs.VertexColor",               "FragInputs.color"),
                 new Dependency("SurfaceDescriptionInputs.FaceSign",                  "FragInputs.isFrontFace"),
+
+                new Dependency("DepthOffset", "FragInputs.positionRWS"),
             };
         };
 
@@ -465,6 +467,7 @@ namespace UnityEditor.Experimental.Rendering.HDPipeline
         public List<string> Includes;
         public string TemplateName;
         public string MaterialName;
+        public List<string> ExtraInstancingOptions;
         public List<string> ExtraDefines;
         public List<int> VertexShaderSlots;         // These control what slots are used by the pass vertex shader
         public List<int> PixelShaderSlots;          // These control what slots are used by the pass pixel shader
@@ -549,7 +552,7 @@ namespace UnityEditor.Experimental.Rendering.HDPipeline
             HDRPShaderStructs.AddActiveFieldsFromPixelGraphRequirements(activeFields, pixelRequirements);
 
             // build the graph outputs structure, and populate activeFields with the fields of that structure
-            GraphUtil.GenerateSurfaceDescriptionStruct(pixelGraphOutputs, pixelSlots, true, pixelGraphOutputStructName, activeFields);
+            GraphUtil.GenerateSurfaceDescriptionStruct(pixelGraphOutputs, pixelSlots, pixelGraphOutputStructName, activeFields);
 
             // Build the graph evaluation code, to evaluate the specified slots
             GraphUtil.GenerateSurfaceDescriptionFunction(
@@ -638,6 +641,16 @@ namespace UnityEditor.Experimental.Rendering.HDPipeline
             ShaderGenerator vertexGraphInputs = new ShaderGenerator();
             ShaderSpliceUtil.BuildType(typeof(HDRPShaderStructs.VertexDescriptionInputs), activeFields, vertexGraphInputs);
 
+            ShaderGenerator instancingOptions = new ShaderGenerator();
+            {
+                instancingOptions.AddShaderChunk("#pragma multi_compile_instancing", true);
+                if (pass.ExtraInstancingOptions != null)
+                {
+                    foreach (var instancingOption in pass.ExtraInstancingOptions)
+                        instancingOptions.AddShaderChunk(instancingOption);
+                }
+            }
+
             ShaderGenerator defines = new ShaderGenerator();
             {
                 defines.AddShaderChunk(string.Format("#define SHADERPASS {0}", pass.ShaderPassName), true);
@@ -665,7 +678,7 @@ namespace UnityEditor.Experimental.Rendering.HDPipeline
             var graph = new ShaderGenerator();
             {
                 graph.AddShaderChunk("// Shared Graph Properties (uniform inputs)");
-                graph.AddShaderChunk(sharedProperties.GetPropertiesDeclaration(1));
+                graph.AddShaderChunk(sharedProperties.GetPropertiesDeclaration(1, mode));
 
                 if (vertexActive)
                 {
@@ -707,6 +720,7 @@ namespace UnityEditor.Experimental.Rendering.HDPipeline
 
             // build the hash table of all named fragments      TODO: could make this Dictionary<string, ShaderGenerator / string>  ?
             Dictionary<string, string> namedFragments = new Dictionary<string, string>();
+            namedFragments.Add("InstancingOptions", instancingOptions.GetShaderString(0, false));
             namedFragments.Add("Defines", defines.GetShaderString(2, false));
             namedFragments.Add("Graph", graph.GetShaderString(2, false));
             namedFragments.Add("LightMode", pass.LightMode);
@@ -858,7 +872,8 @@ namespace UnityEditor.Experimental.Rendering.HDPipeline
         public static SurfaceMaterialOptions BuildMaterialOptions(SurfaceType surfaceType,
                                                                   AlphaMode alphaMode,
                                                                   bool twoSided,
-                                                                  bool refraction)
+                                                                  bool refraction,
+                                                                  bool offscreenTransparent)
         {
             SurfaceMaterialOptions materialOptions = new SurfaceMaterialOptions();
             if (surfaceType == SurfaceType.Opaque)
@@ -874,6 +889,8 @@ namespace UnityEditor.Experimental.Rendering.HDPipeline
                 {
                     materialOptions.srcBlend = SurfaceMaterialOptions.BlendMode.One;
                     materialOptions.dstBlend = SurfaceMaterialOptions.BlendMode.OneMinusSrcAlpha;
+                    materialOptions.alphaSrcBlend = SurfaceMaterialOptions.BlendMode.One;
+                    materialOptions.alphaDstBlend = SurfaceMaterialOptions.BlendMode.OneMinusSrcAlpha;
                 }
                 else
                 {
@@ -882,21 +899,34 @@ namespace UnityEditor.Experimental.Rendering.HDPipeline
                         case AlphaMode.Alpha:
                             materialOptions.srcBlend = SurfaceMaterialOptions.BlendMode.One;
                             materialOptions.dstBlend = SurfaceMaterialOptions.BlendMode.OneMinusSrcAlpha;
+                            materialOptions.alphaSrcBlend = SurfaceMaterialOptions.BlendMode.One;
+                            materialOptions.alphaDstBlend = SurfaceMaterialOptions.BlendMode.OneMinusSrcAlpha;
                             break;
                         case AlphaMode.Additive:
                             materialOptions.srcBlend = SurfaceMaterialOptions.BlendMode.One;
                             materialOptions.dstBlend = SurfaceMaterialOptions.BlendMode.One;
+                            materialOptions.alphaSrcBlend = SurfaceMaterialOptions.BlendMode.One;
+                            materialOptions.alphaDstBlend = SurfaceMaterialOptions.BlendMode.One;
                             break;
                         case AlphaMode.Premultiply:
                             materialOptions.srcBlend = SurfaceMaterialOptions.BlendMode.One;
                             materialOptions.dstBlend = SurfaceMaterialOptions.BlendMode.OneMinusSrcAlpha;
+                            materialOptions.alphaSrcBlend = SurfaceMaterialOptions.BlendMode.One;
+                            materialOptions.alphaDstBlend = SurfaceMaterialOptions.BlendMode.OneMinusSrcAlpha;
                             break;
                         // This isn't supported in HDRP.
                         case AlphaMode.Multiply:
                             materialOptions.srcBlend = SurfaceMaterialOptions.BlendMode.One;
                             materialOptions.dstBlend = SurfaceMaterialOptions.BlendMode.OneMinusSrcAlpha;
+                            materialOptions.alphaSrcBlend = SurfaceMaterialOptions.BlendMode.One;
+                            materialOptions.alphaDstBlend = SurfaceMaterialOptions.BlendMode.OneMinusSrcAlpha;
                             break;
                     }
+                }
+
+                if(offscreenTransparent)
+                {
+                    materialOptions.alphaSrcBlend = SurfaceMaterialOptions.BlendMode.Zero;
                 }
                 materialOptions.zTest = SurfaceMaterialOptions.ZTest.LEqual;
                 materialOptions.zWrite = SurfaceMaterialOptions.ZWrite.Off;
@@ -986,7 +1016,7 @@ namespace UnityEditor.Experimental.Rendering.HDPipeline
             {
                 result.Add(HDRenderQueue.RenderQueueType.PreRefraction);
                 result.Add(HDRenderQueue.RenderQueueType.Transparent);
-                //result.AddHDRenderQueue.RenderQueueType.LowTransparent):
+                result.Add(HDRenderQueue.RenderQueueType.LowTransparent);
                 if (needAfterPostProcess)
                     result.Add(HDRenderQueue.RenderQueueType.AfterPostprocessTransparent);
 #if ENABLE_RAYTRACING
@@ -995,6 +1025,86 @@ namespace UnityEditor.Experimental.Rendering.HDPipeline
             }
 
             return result;
+        }
+
+        public static void GetStencilStateForDepthOrMV(bool receiveDecals, bool receiveSSR, bool useObjectMotionVector, ref Pass pass)
+        {
+            int stencilWriteMask = (int)HDRenderPipeline.StencilBitMask.DecalsForwardOutputNormalBuffer;
+            int stencilRef = receiveDecals ? (int)HDRenderPipeline.StencilBitMask.DecalsForwardOutputNormalBuffer : 0;
+
+            stencilWriteMask |= (int)HDRenderPipeline.StencilBitMask.DoesntReceiveSSR;
+            stencilRef |= !receiveSSR ? (int)HDRenderPipeline.StencilBitMask.DoesntReceiveSSR : 0;
+
+            stencilWriteMask |= useObjectMotionVector ? (int)HDRenderPipeline.StencilBitMask.ObjectMotionVectors : 0;
+            stencilRef |= useObjectMotionVector ? (int)HDRenderPipeline.StencilBitMask.ObjectMotionVectors : 0;
+
+            if (stencilWriteMask != 0)
+            {
+                pass.StencilOverride = new List<string>()
+                {
+                    "// Stencil setup",
+                    "Stencil",
+                    "{",
+                    string.Format("   WriteMask {0}", stencilWriteMask),
+                    string.Format("   Ref  {0}", stencilRef),
+                    "   Comp Always",
+                    "   Pass Replace",
+                    "}"
+                };
+            }
+        }
+
+        public static void GetStencilStateForForward(bool useSplitLighting, ref Pass pass)
+        {
+            pass.StencilOverride = new List<string>()
+            {
+                "// Stencil setup",
+                "Stencil",
+                "{",
+                string.Format("   WriteMask {0}", (int) HDRenderPipeline.StencilBitMask.LightingMask),
+                string.Format("   Ref  {0}", useSplitLighting ? (int)StencilLightingUsage.SplitLighting : (int)StencilLightingUsage.RegularLighting),
+                "   Comp Always",
+                "   Pass Replace",
+                "}"
+            };
+        }
+
+        public static void GetStencilStateForForwardUnlit(ref Pass pass)
+        {
+            pass.StencilOverride = new List<string>()
+            {
+                "// Stencil setup",
+                "Stencil",
+                "{",
+                string.Format("   WriteMask {0}", (int) HDRenderPipeline.StencilBitMask.LightingMask),
+                string.Format("   Ref  {0}", (int)StencilLightingUsage.NoLighting),
+                "   Comp Always",
+                "   Pass Replace",
+                "}"
+            };
+        }        
+
+        public static void GetStencilStateForGBuffer(bool receiveSSR, bool useSplitLighting, ref Pass pass)
+        {
+            int stencilWriteMask = (int)HDRenderPipeline.StencilBitMask.LightingMask;
+            int stencilRef = useSplitLighting ? (int)StencilLightingUsage.SplitLighting : (int)StencilLightingUsage.RegularLighting;
+
+            stencilWriteMask |= (int)HDRenderPipeline.StencilBitMask.DoesntReceiveSSR;
+            stencilRef |= !receiveSSR ? (int)HDRenderPipeline.StencilBitMask.DoesntReceiveSSR : 0;
+
+            stencilWriteMask |= (int)HDRenderPipeline.StencilBitMask.DecalsForwardOutputNormalBuffer;
+
+            pass.StencilOverride = new List<string>()
+            {
+                "// Stencil setup",
+                "Stencil",
+                "{",
+                string.Format("   WriteMask {0}", stencilWriteMask),
+                string.Format("   Ref  {0}", stencilRef),
+                "   Comp Always",
+                "   Pass Replace",
+                "}"
+            };
         }
     }
 }

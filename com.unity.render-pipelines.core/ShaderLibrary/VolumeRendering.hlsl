@@ -237,8 +237,12 @@ real CornetteShanksPhasePartAsymmetrical(real anisotropy, real cosTheta)
     real g = anisotropy;
     real x = 1 + g * g - 2 * g * cosTheta;
     real f = rsqrt(max(x, FLT_EPS)); // x^(-1/2)
+<<<<<<< HEAD
     return f * f * f;                // x^(-3/2)
 }
+=======
+    real h = (1 + cosTheta * cosTheta);
+>>>>>>> master
 
 real CornetteShanksPhasePartVarying(real anisotropy, real cosTheta)
 {

@@ -9,45 +9,33 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
     {
         // External structures
         HDRenderPipelineAsset m_PipelineAsset = null;
+        RenderPipelineResources m_PipelineResources = null;
         SkyManager m_SkyManager = null;
         HDRaytracingManager m_RaytracingManager = null;
         SharedRTManager m_SharedRTManager = null;
-
-        // The target denoising kernel
-        static int m_KernelFilter;
+        GBufferManager m_GbufferManager = null;
 
         // Intermediate buffer that stores the reflection pre-denoising
-        RTHandleSystem.RTHandle m_IntermediateBuffer = null;
-
-        // Light cluster structure
-        public HDRaytracingLightCluster m_LightCluster = null;
+        RTHandleSystem.RTHandle m_LightingTexture = null;
+        RTHandleSystem.RTHandle m_HitPdfTexture = null;
+        RTHandleSystem.RTHandle m_VarianceBuffer = null;
+        RTHandleSystem.RTHandle m_MinBoundBuffer = null;
+        RTHandleSystem.RTHandle m_MaxBoundBuffer = null;
 
         // String values
-        const string m_RayGenShaderName = "RayGenReflections";
+        const string m_RayGenHalfResName = "RayGenHalfRes";
+        const string m_RayGenIntegrationName = "RayGenIntegration";
         const string m_MissShaderName = "MissShaderReflections";
-        const string m_ClosestHitShaderName = "ClosestHitMain";
-
-        // Shader Identifiers
-        public static readonly int _DenoiseRadius = Shader.PropertyToID("_DenoiseRadius");
-        public static readonly int _GaussianSigma = Shader.PropertyToID("_GaussianSigma");
-
-        public static readonly int _RaytracingLightCluster = Shader.PropertyToID("_RaytracingLightCluster");
-        public static readonly int _MinClusterPos = Shader.PropertyToID("_MinClusterPos");
-        public static readonly int _MaxClusterPos = Shader.PropertyToID("_MaxClusterPos");
-        public static readonly int _LightPerCellCount = Shader.PropertyToID("_LightPerCellCount");
-        public static readonly int _LightDatasRT = Shader.PropertyToID("_LightDatasRT");
-        public static readonly int _PunctualLightCountRT = Shader.PropertyToID("_PunctualLightCountRT");
-        public static readonly int _AreaLightCountRT = Shader.PropertyToID("_AreaLightCountRT");
-        public static readonly int _PixelSpreadAngle = Shader.PropertyToID("_PixelSpreadAngle");
 
         public HDRaytracingReflections()
         {
         }
 
-        public void Init(HDRenderPipelineAsset asset, SkyManager skyManager, HDRaytracingManager raytracingManager, SharedRTManager sharedRTManager)
+        public void Init(HDRenderPipelineAsset asset, SkyManager skyManager, HDRaytracingManager raytracingManager, SharedRTManager sharedRTManager, GBufferManager gbufferManager)
         {
             // Keep track of the pipeline asset
             m_PipelineAsset = asset;
+            m_PipelineResources = asset.renderPipelineResources;
 
             // Keep track of the sky manager
             m_SkyManager = skyManager;
@@ -57,124 +45,345 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
 
             // Keep track of the shared rt manager
             m_SharedRTManager = sharedRTManager;
+            m_GbufferManager = gbufferManager;
 
-            m_IntermediateBuffer = RTHandles.Alloc(Vector2.one, filterMode: FilterMode.Point, colorFormat: GraphicsFormat.R16G16B16A16_SFloat, enableRandomWrite: true, useDynamicScale: true, useMipMap: false, name: "IntermediateReflectionBuffer");
+            m_LightingTexture = RTHandles.Alloc(Vector2.one, filterMode: FilterMode.Point, colorFormat: GraphicsFormat.R16G16B16A16_SFloat, enableRandomWrite: true, xrInstancing: true, useDynamicScale: true, useMipMap: false, autoGenerateMips: false, name: "LightingBuffer");
+            m_HitPdfTexture = RTHandles.Alloc(Vector2.one, filterMode: FilterMode.Point, colorFormat: GraphicsFormat.R16G16B16A16_SFloat, enableRandomWrite: true, xrInstancing: true, useDynamicScale: true, useMipMap: false, autoGenerateMips: false, name: "HitPdfBuffer");
+            m_VarianceBuffer = RTHandles.Alloc(Vector2.one, filterMode: FilterMode.Point, colorFormat: GraphicsFormat.R8_UNorm, enableRandomWrite: true, xrInstancing: true, useDynamicScale: true, useMipMap: false, autoGenerateMips: false, name: "VarianceBuffer");
+            m_MinBoundBuffer = RTHandles.Alloc(Vector2.one, filterMode: FilterMode.Point, colorFormat: GraphicsFormat.B10G11R11_UFloatPack32, enableRandomWrite: true, xrInstancing: true, useDynamicScale: true, useMipMap: false, autoGenerateMips: false, name: "MinBoundBuffer");
+            m_MaxBoundBuffer = RTHandles.Alloc(Vector2.one, filterMode: FilterMode.Point, colorFormat: GraphicsFormat.B10G11R11_UFloatPack32, enableRandomWrite: true, xrInstancing: true, useDynamicScale: true, useMipMap: false, autoGenerateMips: false, name: "MaxBoundBuffer");
+        }
 
-            // Allocate the light cluster
-            m_LightCluster = new HDRaytracingLightCluster();
-            m_LightCluster.Initialize(asset, raytracingManager);
-
+        static RTHandleSystem.RTHandle ReflectionHistoryBufferAllocatorFunction(string viewName, int frameIndex, RTHandleSystem rtHandleSystem)
+        {
+            return rtHandleSystem.Alloc(Vector2.one, filterMode: FilterMode.Point, colorFormat: GraphicsFormat.R16G16B16A16_SFloat,
+                                        enableRandomWrite: true, useMipMap: false, autoGenerateMips: false, xrInstancing: true,
+                                        name: string.Format("ReflectionHistoryBuffer{0}", frameIndex));
         }
 
         public void Release()
         {
-            m_LightCluster.ReleaseResources();
-            m_LightCluster = null;
-
-            RTHandles.Release(m_IntermediateBuffer);
+            RTHandles.Release(m_MinBoundBuffer);
+            RTHandles.Release(m_MaxBoundBuffer);
+            RTHandles.Release(m_VarianceBuffer);
+            RTHandles.Release(m_HitPdfTexture);
+            RTHandles.Release(m_LightingTexture);
         }
 
-        public void RenderReflections(HDCamera hdCamera, CommandBuffer cmd, RTHandleSystem.RTHandle outputTexture, ScriptableRenderContext renderContext)
+        public void RenderReflections(HDCamera hdCamera, CommandBuffer cmd, RTHandleSystem.RTHandle outputTexture, ScriptableRenderContext renderContext, int frameCount)
+        {
+            RenderPipelineSettings.RaytracingTier currentTier = m_PipelineAsset.currentPlatformRenderPipelineSettings.supportedRaytracingTier;
+            switch (currentTier)
+            {
+                case RenderPipelineSettings.RaytracingTier.Tier1:
+                {
+                    RenderReflectionsT1(hdCamera, cmd, outputTexture, renderContext, frameCount);
+                }
+                break;
+                case RenderPipelineSettings.RaytracingTier.Tier2:
+                {
+                    RenderReflectionsT2(hdCamera, cmd, outputTexture, renderContext, frameCount);
+                }
+                break;
+            }
+        }
+
+        public void RenderReflectionsT1(HDCamera hdCamera, CommandBuffer cmd, RTHandleSystem.RTHandle outputTexture, ScriptableRenderContext renderContext, int frameCount)
         {
             // First thing to check is: Do we have a valid ray-tracing environment?
             HDRaytracingEnvironment rtEnvironement = m_RaytracingManager.CurrentEnvironment();
-            Texture2DArray noiseTexture = m_RaytracingManager.m_RGNoiseTexture;
-            ComputeShader bilateralFilter = m_PipelineAsset.renderPipelineResources.shaders.reflectionBilateralFilterCS;
-            RaytracingShader reflectionShader = m_PipelineAsset.renderPipelineResources.shaders.reflectionRaytracing;
-            bool missingResources = rtEnvironement == null || noiseTexture == null || bilateralFilter == null || reflectionShader == null;
+            HDRenderPipeline renderPipeline = m_RaytracingManager.GetRenderPipeline();
+            BlueNoise blueNoise = m_RaytracingManager.GetBlueNoiseManager();
+            ComputeShader reflectionFilter = m_PipelineAsset.renderPipelineRayTracingResources.reflectionBilateralFilterCS;
+            RaytracingShader reflectionShader = m_PipelineAsset.renderPipelineRayTracingResources.reflectionRaytracing;
 
-            // Try to grab the acceleration structure and the list of HD lights for the target camera
-            RaytracingAccelerationStructure accelerationStructure = m_RaytracingManager.RequestAccelerationStructure(hdCamera);
-            List<HDAdditionalLightData> lightData = m_RaytracingManager.RequestHDLightList(hdCamera);
+            bool invalidState = rtEnvironement == null || blueNoise == null
+                || reflectionFilter == null || reflectionShader == null
+                || m_PipelineResources.textures.owenScrambledTex == null || m_PipelineResources.textures.scramblingTex == null;
 
             // If no acceleration structure available, end it now
-            if (accelerationStructure == null || lightData == null || missingResources)
+            if (invalidState)
                 return;
 
-            // Evaluate the light cluster
-            // TODO: Do only this once per frame and share it between primary visibility and reflection (if any of them request it)
-            m_LightCluster.EvaluateLightClusters(cmd, hdCamera, lightData);
+            var settings = VolumeManager.instance.stack.GetComponent<ScreenSpaceReflection>();
+
+            // Grab the acceleration structures and the light cluster to use
+            RaytracingAccelerationStructure accelerationStructure = m_RaytracingManager.RequestAccelerationStructure(rtEnvironement.reflLayerMask);
+            HDRaytracingLightCluster lightCluster = m_RaytracingManager.RequestLightCluster(rtEnvironement.reflLayerMask);
+
+            // Compute the actual resolution that is needed base on the quality
+            string targetRayGen = m_RayGenHalfResName;
 
             // Define the shader pass to use for the reflection pass
-            cmd.SetRaytracingShaderPass(reflectionShader, "RTRaytrace_Reflections");
+            cmd.SetRaytracingShaderPass(reflectionShader, "IndirectDXR");
 
             // Set the acceleration structure for the pass
             cmd.SetRaytracingAccelerationStructure(reflectionShader, HDShaderIDs._RaytracingAccelerationStructureName, accelerationStructure);
 
-            // Inject the ray-tracing noise data
-            cmd.SetRaytracingTextureParam(reflectionShader, m_RayGenShaderName, HDShaderIDs._RaytracingNoiseTexture, noiseTexture);
-            cmd.SetRaytracingIntParams(reflectionShader, HDShaderIDs._RaytracingNoiseResolution, noiseTexture.width);
-            cmd.SetRaytracingIntParams(reflectionShader, HDShaderIDs._RaytracingNumNoiseLayers, noiseTexture.depth);
+            // Inject the ray-tracing sampling data
+            cmd.SetRaytracingTextureParam(reflectionShader, HDShaderIDs._OwenScrambledTexture, m_PipelineResources.textures.owenScrambledTex);
+            cmd.SetRaytracingTextureParam(reflectionShader, HDShaderIDs._ScramblingTexture, m_PipelineResources.textures.scramblingTex);
+
+            // Global reflection parameters
+            cmd.SetRaytracingFloatParams(reflectionShader, HDShaderIDs._RaytracingIntensityClamp, settings.clampValue.value);
+            cmd.SetRaytracingFloatParams(reflectionShader, HDShaderIDs._RaytracingReflectionMinSmoothness, settings.minSmoothness.value);
+            cmd.SetRaytracingIntParams(reflectionShader, HDShaderIDs._RaytracingReflectSky, settings.reflectSky.value ? 1 : 0);
 
             // Inject the ray generation data
             cmd.SetGlobalFloat(HDShaderIDs._RaytracingRayBias, rtEnvironement.rayBias);
-            cmd.SetGlobalFloat(HDShaderIDs._RaytracingRayMaxLength, rtEnvironement.reflRayLength);
-            cmd.SetRaytracingIntParams(reflectionShader, HDShaderIDs._RaytracingNumSamples, rtEnvironement.reflNumMaxSamples);
+            cmd.SetGlobalFloat(HDShaderIDs._RaytracingRayMaxLength, settings.rayLength.value);
+            cmd.SetRaytracingIntParams(reflectionShader, HDShaderIDs._RaytracingNumSamples, settings.numSamples.value);
+            int frameIndex = hdCamera.IsTAAEnabled() ? hdCamera.taaFrameIndex : (int)frameCount % 8;
+            cmd.SetGlobalInt(HDShaderIDs._RaytracingFrameIndex, frameIndex);
 
             // Set the data for the ray generation
-            cmd.SetRaytracingTextureParam(reflectionShader, m_RayGenShaderName, HDShaderIDs._SsrLightingTextureRW, m_IntermediateBuffer);
-            cmd.SetRaytracingTextureParam(reflectionShader, m_RayGenShaderName, HDShaderIDs._DepthTexture, m_SharedRTManager.GetDepthStencilBuffer());
-            cmd.SetRaytracingTextureParam(reflectionShader, m_RayGenShaderName, HDShaderIDs._NormalBufferTexture, m_SharedRTManager.GetNormalBuffer());
+            cmd.SetRaytracingTextureParam(reflectionShader, HDShaderIDs._SsrLightingTextureRW, m_LightingTexture);
+            cmd.SetRaytracingTextureParam(reflectionShader, HDShaderIDs._SsrHitPointTexture, m_HitPdfTexture);
+            cmd.SetRaytracingTextureParam(reflectionShader, HDShaderIDs._DepthTexture, m_SharedRTManager.GetDepthStencilBuffer());
+            cmd.SetRaytracingTextureParam(reflectionShader, HDShaderIDs._NormalBufferTexture, m_SharedRTManager.GetNormalBuffer());
+
+            // Set ray count tex
+            cmd.SetRaytracingIntParam(reflectionShader, HDShaderIDs._RayCountEnabled, m_RaytracingManager.rayCountManager.RayCountIsEnabled());
+            cmd.SetRaytracingTextureParam(reflectionShader, HDShaderIDs._RayCountTexture, m_RaytracingManager.rayCountManager.rayCountTexture);
 
             // Compute the pixel spread value
             float pixelSpreadAngle = Mathf.Atan(2.0f * Mathf.Tan(hdCamera.camera.fieldOfView * Mathf.PI / 360.0f) / Mathf.Min(hdCamera.actualWidth, hdCamera.actualHeight));
-            cmd.SetRaytracingFloatParam(reflectionShader, _PixelSpreadAngle, pixelSpreadAngle);
+            cmd.SetRaytracingFloatParam(reflectionShader, HDShaderIDs._RaytracingPixelSpreadAngle, pixelSpreadAngle);
 
-            if(lightData.Count != 0)
-            {
-                // LightLoop data
-                cmd.SetGlobalBuffer(_RaytracingLightCluster, m_LightCluster.GetCluster());
-                cmd.SetGlobalBuffer(_LightDatasRT, m_LightCluster.GetLightDatas());
-                cmd.SetGlobalVector(_MinClusterPos, m_LightCluster.GetMinClusterPos());
-                cmd.SetGlobalVector(_MaxClusterPos, m_LightCluster.GetMaxClusterPos());
-                cmd.SetGlobalInt(_LightPerCellCount, rtEnvironement.maxNumLightsPercell);
-                cmd.SetGlobalInt(_PunctualLightCountRT, m_LightCluster.GetPunctualLightCount());
-                cmd.SetGlobalInt(_AreaLightCountRT, m_LightCluster.GetAreaLightCount());
-            }
+            // LightLoop data
+            cmd.SetGlobalBuffer(HDShaderIDs._RaytracingLightCluster, lightCluster.GetCluster());
+            cmd.SetGlobalBuffer(HDShaderIDs._LightDatasRT, lightCluster.GetLightDatas());
+            cmd.SetGlobalVector(HDShaderIDs._MinClusterPos, lightCluster.GetMinClusterPos());
+            cmd.SetGlobalVector(HDShaderIDs._MaxClusterPos, lightCluster.GetMaxClusterPos());
+            cmd.SetGlobalInt(HDShaderIDs._LightPerCellCount, rtEnvironement.maxNumLightsPercell);
+            cmd.SetGlobalInt(HDShaderIDs._PunctualLightCountRT, lightCluster.GetPunctualLightCount());
+            cmd.SetGlobalInt(HDShaderIDs._AreaLightCountRT, lightCluster.GetAreaLightCount());
+
+            // Note: Just in case, we rebind the directional light data (in case they were not)
+            cmd.SetGlobalBuffer(HDShaderIDs._DirectionalLightDatas, renderPipeline.directionalLightDatas);
+            cmd.SetGlobalInt(HDShaderIDs._DirectionalLightCount, renderPipeline.m_lightList.directionalLights.Count);
+
+            // Evaluate the clear coat mask texture based on the lit shader mode
+            RenderTargetIdentifier clearCoatMaskTexture = hdCamera.frameSettings.litShaderMode == LitShaderMode.Deferred ? m_GbufferManager.GetBuffersRTI()[2] : Texture2D.blackTexture;
+            cmd.SetRaytracingTextureParam(reflectionShader, HDShaderIDs._SsrClearCoatMaskTexture, clearCoatMaskTexture);
 
             // Set the data for the ray miss
-            cmd.SetRaytracingTextureParam(reflectionShader, m_MissShaderName, HDShaderIDs._SkyTexture, m_SkyManager.skyReflection);
+            cmd.SetRaytracingTextureParam(reflectionShader, HDShaderIDs._SkyTexture, m_SkyManager.skyReflection);
+
+            // Compute the actual resolution that is needed base on the quality
+            uint widthResolution = (uint)hdCamera.actualWidth / 2;
+            uint heightResolution = (uint)hdCamera.actualHeight / 2;
+
+            // Force to disable specular lighting
+            cmd.SetGlobalInt(HDShaderIDs._EnableSpecularLighting, 0);
 
             // Run the calculus
-            cmd.DispatchRays(reflectionShader, m_RayGenShaderName, (uint)hdCamera.actualWidth, (uint)hdCamera.actualHeight, 1);
+            cmd.DispatchRays(reflectionShader, targetRayGen, widthResolution, heightResolution, 1);
+
+            // Restore the previous state of specular lighting
+            cmd.SetGlobalInt(HDShaderIDs._EnableSpecularLighting, hdCamera.frameSettings.IsEnabled(FrameSettingsField.SpecularLighting) ? 1 : 0);
 
             using (new ProfilingSample(cmd, "Filter Reflection", CustomSamplerId.RaytracingFilterReflection.GetSampler()))
             {
-                switch (rtEnvironement.reflFilterMode)
+                // Fetch the right filter to use
+                int currentKernel = reflectionFilter.FindKernel("RaytracingReflectionFilter");
+
+                // Inject all the parameters for the compute
+                cmd.SetComputeTextureParam(reflectionFilter, currentKernel, HDShaderIDs._SsrLightingTextureRW, m_LightingTexture);
+                cmd.SetComputeTextureParam(reflectionFilter, currentKernel, HDShaderIDs._SsrHitPointTexture, m_HitPdfTexture);
+                cmd.SetComputeTextureParam(reflectionFilter, currentKernel, HDShaderIDs._DepthTexture, m_SharedRTManager.GetDepthStencilBuffer());
+                cmd.SetComputeTextureParam(reflectionFilter, currentKernel, HDShaderIDs._NormalBufferTexture, m_SharedRTManager.GetNormalBuffer());
+                cmd.SetComputeTextureParam(reflectionFilter, currentKernel, "_NoiseTexture", blueNoise.textureArray16RGB);
+                cmd.SetComputeTextureParam(reflectionFilter, currentKernel, "_VarianceTexture", m_VarianceBuffer);
+                cmd.SetComputeTextureParam(reflectionFilter, currentKernel, "_MinColorRangeTexture", m_MinBoundBuffer);
+                cmd.SetComputeTextureParam(reflectionFilter, currentKernel, "_MaxColorRangeTexture", m_MaxBoundBuffer);
+                cmd.SetComputeTextureParam(reflectionFilter, currentKernel, "_RaytracingReflectionTexture", outputTexture);
+                cmd.SetComputeTextureParam(reflectionFilter, currentKernel, HDShaderIDs._ScramblingTexture, m_PipelineResources.textures.scramblingTex);
+                cmd.SetComputeIntParam(reflectionFilter, HDShaderIDs._SpatialFilterRadius, settings.spatialFilterRadius.value);
+                cmd.SetComputeFloatParam(reflectionFilter, HDShaderIDs._RaytracingReflectionMinSmoothness, settings.minSmoothness.value);
+
+                // Texture dimensions
+                int texWidth = outputTexture.rt.width ;
+                int texHeight = outputTexture.rt.height;
+
+                // Evaluate the dispatch parameters
+                int areaTileSize = 8;
+                int numTilesXHR = (texWidth  + (areaTileSize - 1)) / areaTileSize;
+                int numTilesYHR = (texHeight + (areaTileSize - 1)) / areaTileSize;
+
+                // Bind the right texture for clear coat support
+                cmd.SetComputeTextureParam(reflectionFilter, currentKernel, HDShaderIDs._SsrClearCoatMaskTexture, clearCoatMaskTexture);
+
+                // Compute the texture
+                cmd.DispatchCompute(reflectionFilter, currentKernel, numTilesXHR, numTilesYHR, 1);
+
+                int numTilesXFR = (texWidth + (areaTileSize - 1)) / areaTileSize;
+                int numTilesYFR = (texHeight + (areaTileSize - 1)) / areaTileSize;
+
+                RTHandleSystem.RTHandle history = hdCamera.GetCurrentFrameRT((int)HDCameraFrameHistoryType.RaytracedReflection)
+                    ?? hdCamera.AllocHistoryFrameRT((int)HDCameraFrameHistoryType.RaytracedReflection, ReflectionHistoryBufferAllocatorFunction, 1);
+
+                // Fetch the right filter to use
+                currentKernel = reflectionFilter.FindKernel("TemporalAccumulationFilter");
+                cmd.SetComputeFloatParam(reflectionFilter, HDShaderIDs._TemporalAccumuationWeight, settings.temporalAccumulationWeight.value);
+                cmd.SetComputeTextureParam(reflectionFilter, currentKernel, HDShaderIDs._AccumulatedFrameTexture, history);
+                cmd.SetComputeTextureParam(reflectionFilter, currentKernel, HDShaderIDs._CurrentFrameTexture, outputTexture);
+                cmd.SetComputeTextureParam(reflectionFilter, currentKernel, "_MinColorRangeTexture", m_MinBoundBuffer);
+                cmd.SetComputeTextureParam(reflectionFilter, currentKernel, "_MaxColorRangeTexture", m_MaxBoundBuffer);
+                cmd.DispatchCompute(reflectionFilter, currentKernel, numTilesXFR, numTilesYFR, 1);
+            }
+        }
+
+        public void RenderReflectionsT2(HDCamera hdCamera, CommandBuffer cmd, RTHandleSystem.RTHandle outputTexture, ScriptableRenderContext renderContext, int frameCount)
+        {
+            // First thing to check is: Do we have a valid ray-tracing environment?
+            HDRaytracingEnvironment rtEnvironement = m_RaytracingManager.CurrentEnvironment();
+            HDRenderPipeline renderPipeline = m_RaytracingManager.GetRenderPipeline();
+            BlueNoise blueNoise = m_RaytracingManager.GetBlueNoiseManager();
+            ComputeShader reflectionFilter = m_PipelineAsset.renderPipelineRayTracingResources.reflectionBilateralFilterCS;
+            RaytracingShader reflectionShader = m_PipelineAsset.renderPipelineRayTracingResources.reflectionRaytracing;
+            RenderPipelineSettings.RaytracingTier currentTier = m_PipelineAsset.currentPlatformRenderPipelineSettings.supportedRaytracingTier;
+
+            bool invalidState = rtEnvironement == null || blueNoise == null
+                || reflectionFilter == null || reflectionShader == null
+                || m_PipelineResources.textures.owenScrambledTex == null || m_PipelineResources.textures.scramblingTex == null;
+
+            // If no acceleration structure available, end it now
+            if (invalidState)
+                return;
+
+            var settings = VolumeManager.instance.stack.GetComponent<ScreenSpaceReflection>();
+
+            // Grab the acceleration structures and the light cluster to use
+            RaytracingAccelerationStructure accelerationStructure = m_RaytracingManager.RequestAccelerationStructure(rtEnvironement.reflLayerMask);
+            HDRaytracingLightCluster lightCluster = m_RaytracingManager.RequestLightCluster(rtEnvironement.reflLayerMask);
+
+            // Compute the actual resolution that is needed base on the quality
+            string targetRayGen = m_RayGenIntegrationName;
+
+            // Define the shader pass to use for the reflection pass
+            cmd.SetRaytracingShaderPass(reflectionShader, "IndirectDXR");
+
+            // Set the acceleration structure for the pass
+            cmd.SetRaytracingAccelerationStructure(reflectionShader, HDShaderIDs._RaytracingAccelerationStructureName, accelerationStructure);
+
+            // Inject the ray-tracing sampling data
+            cmd.SetRaytracingTextureParam(reflectionShader, HDShaderIDs._OwenScrambledTexture, m_PipelineResources.textures.owenScrambledTex);
+            cmd.SetRaytracingTextureParam(reflectionShader, HDShaderIDs._ScramblingTexture, m_PipelineResources.textures.scramblingTex);
+
+            // Global reflection parameters
+            cmd.SetRaytracingFloatParams(reflectionShader, HDShaderIDs._RaytracingIntensityClamp, settings.clampValue.value);
+            cmd.SetRaytracingFloatParams(reflectionShader, HDShaderIDs._RaytracingReflectionMinSmoothness, settings.minSmoothness.value);
+            cmd.SetRaytracingFloatParams(reflectionShader, HDShaderIDs._RaytracingReflectSky, settings.reflectSky.value ? 1 : 0);
+
+            // Inject the ray generation data
+            cmd.SetGlobalFloat(HDShaderIDs._RaytracingRayBias, rtEnvironement.rayBias);
+            cmd.SetGlobalFloat(HDShaderIDs._RaytracingRayMaxLength, settings.rayLength.value);
+            cmd.SetRaytracingIntParams(reflectionShader, HDShaderIDs._RaytracingNumSamples, settings.numSamples.value);
+            int frameIndex = hdCamera.IsTAAEnabled() ? hdCamera.taaFrameIndex : (int)frameCount % 8;
+            cmd.SetGlobalInt(HDShaderIDs._RaytracingFrameIndex, frameIndex);
+
+            // Set the data for the ray generation
+            cmd.SetRaytracingTextureParam(reflectionShader, HDShaderIDs._SsrLightingTextureRW, m_LightingTexture);
+            cmd.SetRaytracingTextureParam(reflectionShader, HDShaderIDs._SsrHitPointTexture, m_HitPdfTexture);
+            cmd.SetRaytracingTextureParam(reflectionShader, HDShaderIDs._DepthTexture, m_SharedRTManager.GetDepthStencilBuffer());
+            cmd.SetRaytracingTextureParam(reflectionShader, HDShaderIDs._NormalBufferTexture, m_SharedRTManager.GetNormalBuffer());
+
+            // Set ray count tex
+            cmd.SetRaytracingIntParam(reflectionShader, HDShaderIDs._RayCountEnabled, m_RaytracingManager.rayCountManager.RayCountIsEnabled());
+            cmd.SetRaytracingTextureParam(reflectionShader, HDShaderIDs._RayCountTexture, m_RaytracingManager.rayCountManager.rayCountTexture);
+
+            // Compute the pixel spread value
+            float pixelSpreadAngle = Mathf.Atan(2.0f * Mathf.Tan(hdCamera.camera.fieldOfView * Mathf.PI / 360.0f) / Mathf.Min(hdCamera.actualWidth, hdCamera.actualHeight));
+            cmd.SetRaytracingFloatParam(reflectionShader, HDShaderIDs._RaytracingPixelSpreadAngle, pixelSpreadAngle);
+
+            // LightLoop data
+            cmd.SetGlobalBuffer(HDShaderIDs._RaytracingLightCluster, lightCluster.GetCluster());
+            cmd.SetGlobalBuffer(HDShaderIDs._LightDatasRT, lightCluster.GetLightDatas());
+            cmd.SetGlobalVector(HDShaderIDs._MinClusterPos, lightCluster.GetMinClusterPos());
+            cmd.SetGlobalVector(HDShaderIDs._MaxClusterPos, lightCluster.GetMaxClusterPos());
+            cmd.SetGlobalInt(HDShaderIDs._LightPerCellCount, rtEnvironement.maxNumLightsPercell);
+            cmd.SetGlobalInt(HDShaderIDs._PunctualLightCountRT, lightCluster.GetPunctualLightCount());
+            cmd.SetGlobalInt(HDShaderIDs._AreaLightCountRT, lightCluster.GetAreaLightCount());
+
+            // Note: Just in case, we rebind the directional light data (in case they were not)
+            cmd.SetGlobalBuffer(HDShaderIDs._DirectionalLightDatas, renderPipeline.directionalLightDatas);
+            cmd.SetGlobalInt(HDShaderIDs._DirectionalLightCount, renderPipeline.m_lightList.directionalLights.Count);
+
+            // Evaluate the clear coat mask texture based on the lit shader mode
+            RenderTargetIdentifier clearCoatMaskTexture = hdCamera.frameSettings.litShaderMode == LitShaderMode.Deferred ? m_GbufferManager.GetBuffersRTI()[2] : Texture2D.blackTexture;
+            cmd.SetRaytracingTextureParam(reflectionShader, HDShaderIDs._SsrClearCoatMaskTexture, clearCoatMaskTexture);
+
+            // Set the data for the ray miss
+            cmd.SetRaytracingTextureParam(reflectionShader, HDShaderIDs._SkyTexture, m_SkyManager.skyReflection);
+
+            // Compute the actual resolution that is needed base on the quality
+            uint widthResolution = (uint)hdCamera.actualWidth;
+            uint heightResolution = (uint)hdCamera.actualHeight;
+
+            // Force to disable specular lighting
+            cmd.SetGlobalInt(HDShaderIDs._EnableSpecularLighting, 0);
+
+            // Run the calculus
+            cmd.DispatchRays(reflectionShader, targetRayGen, widthResolution, heightResolution, 1);
+
+            // Restore the previous state of specular lighting
+            cmd.SetGlobalInt(HDShaderIDs._EnableSpecularLighting, hdCamera.frameSettings.IsEnabled(FrameSettingsField.SpecularLighting) ? 1 : 0);
+
+            using (new ProfilingSample(cmd, "Filter Reflection", CustomSamplerId.RaytracingFilterReflection.GetSampler()))
+            {
+                if (settings.enableFilter.value)
                 {
-                    case HDRaytracingEnvironment.ReflectionsFilterMode.Bilateral:
-                    {
-                        // Fetch the right filter to use
-                        m_KernelFilter = bilateralFilter.FindKernel("GaussianBilateralFilter");
+                    // Grab the history buffer
+                    RTHandleSystem.RTHandle reflectionHistory = hdCamera.GetCurrentFrameRT((int)HDCameraFrameHistoryType.RaytracedReflection)
+                        ?? hdCamera.AllocHistoryFrameRT((int)HDCameraFrameHistoryType.RaytracedReflection, ReflectionHistoryBufferAllocatorFunction, 1);
 
-                        // Inject all the parameters for the compute
-                        cmd.SetComputeIntParam(bilateralFilter, _DenoiseRadius, rtEnvironement.reflBilateralRadius);
-                        cmd.SetComputeFloatParam(bilateralFilter, _GaussianSigma, rtEnvironement.reflBilateralSigma);
-                        cmd.SetComputeTextureParam(bilateralFilter, m_KernelFilter, "_SourceTexture", m_IntermediateBuffer);
-                        cmd.SetComputeTextureParam(bilateralFilter, m_KernelFilter, HDShaderIDs._DepthTexture, m_SharedRTManager.GetDepthStencilBuffer());
-                        cmd.SetComputeTextureParam(bilateralFilter, m_KernelFilter, HDShaderIDs._NormalBufferTexture, m_SharedRTManager.GetNormalBuffer());
+                    // Texture dimensions
+                    int texWidth = hdCamera.actualWidth;
+                    int texHeight = hdCamera.actualHeight;
 
-                        // Set the output slot
-                        cmd.SetComputeTextureParam(bilateralFilter, m_KernelFilter, "_OutputTexture", outputTexture);
+                    // Evaluate the dispatch parameters
+                    int areaTileSize = 8;
+                    int numTilesX = (texWidth + (areaTileSize - 1)) / areaTileSize;
+                    int numTilesY = (texHeight + (areaTileSize - 1)) / areaTileSize;
 
-                        // Texture dimensions
-                        int texWidth = outputTexture.rt.width;
-                        int texHeight = outputTexture.rt.width;
+                    int m_KernelFilter = reflectionFilter.FindKernel("RaytracingReflectionTAA");
 
-                        // Evaluate the dispatch parameters
-                        int areaTileSize = 8;
-                        int numTilesX = (texWidth + (areaTileSize - 1)) / areaTileSize;
-                        int numTilesY = (texHeight + (areaTileSize - 1)) / areaTileSize;
+                    // Compute the combined TAA frame
+                    var historyScale = new Vector2(hdCamera.actualWidth / (float)reflectionHistory.rt.width, hdCamera.actualHeight / (float)reflectionHistory.rt.height);
+                    cmd.SetComputeVectorParam(reflectionFilter, HDShaderIDs._RTHandleScaleHistory, historyScale);
+                    cmd.SetComputeTextureParam(reflectionFilter, m_KernelFilter, HDShaderIDs._DepthTexture, m_SharedRTManager.GetDepthStencilBuffer());
+                    cmd.SetComputeTextureParam(reflectionFilter, m_KernelFilter, HDShaderIDs._DenoiseInputTexture, m_LightingTexture);
+                    cmd.SetComputeTextureParam(reflectionFilter, m_KernelFilter, HDShaderIDs._DenoiseOutputTextureRW, m_HitPdfTexture);
+                    cmd.SetComputeTextureParam(reflectionFilter, m_KernelFilter, HDShaderIDs._ReflectionHistorybufferRW, reflectionHistory);
+                    cmd.DispatchCompute(reflectionFilter, m_KernelFilter, numTilesX, numTilesY, 1);
 
-                        // Compute the texture
-                        cmd.DispatchCompute(bilateralFilter, m_KernelFilter, numTilesX, numTilesY, 1);
-                    }
-                    break;
-                    case HDRaytracingEnvironment.ReflectionsFilterMode.None:
-                    {
-                        HDUtils.BlitCameraTexture(cmd, hdCamera, m_IntermediateBuffer, outputTexture);
-                    }
-                    break;
+                    // Output the new history
+                    HDUtils.BlitCameraTexture(cmd, m_HitPdfTexture, reflectionHistory);
+
+                    m_KernelFilter = reflectionFilter.FindKernel("ReflBilateralFilterH");
+
+                    // Horizontal pass of the bilateral filter
+                    cmd.SetComputeIntParam(reflectionFilter, HDShaderIDs._RaytracingDenoiseRadius, settings.filterRadius.value);
+                    cmd.SetComputeTextureParam(reflectionFilter, m_KernelFilter, HDShaderIDs._DenoiseInputTexture, reflectionHistory);
+                    cmd.SetComputeTextureParam(reflectionFilter, m_KernelFilter, HDShaderIDs._DepthTexture, m_SharedRTManager.GetDepthStencilBuffer());
+                    cmd.SetComputeTextureParam(reflectionFilter, m_KernelFilter, HDShaderIDs._NormalBufferTexture, m_SharedRTManager.GetNormalBuffer());
+                    cmd.SetComputeTextureParam(reflectionFilter, m_KernelFilter, HDShaderIDs._DenoiseOutputTextureRW, m_HitPdfTexture);
+                    cmd.DispatchCompute(reflectionFilter, m_KernelFilter, numTilesX, numTilesY, 1);
+
+                    m_KernelFilter = reflectionFilter.FindKernel("ReflBilateralFilterV");
+
+                    // Horizontal pass of the bilateral filter
+                    cmd.SetComputeIntParam(reflectionFilter, HDShaderIDs._RaytracingDenoiseRadius, settings.filterRadius.value);
+                    cmd.SetComputeTextureParam(reflectionFilter, m_KernelFilter, HDShaderIDs._DenoiseInputTexture, m_HitPdfTexture);
+                    cmd.SetComputeTextureParam(reflectionFilter, m_KernelFilter, HDShaderIDs._DepthTexture, m_SharedRTManager.GetDepthStencilBuffer());
+                    cmd.SetComputeTextureParam(reflectionFilter, m_KernelFilter, HDShaderIDs._NormalBufferTexture, m_SharedRTManager.GetNormalBuffer());
+                    cmd.SetComputeTextureParam(reflectionFilter, m_KernelFilter, HDShaderIDs._DenoiseOutputTextureRW, outputTexture);
+                    cmd.DispatchCompute(reflectionFilter, m_KernelFilter, numTilesX, numTilesY, 1);
+                }
+                else
+                {
+                    HDUtils.BlitCameraTexture(cmd, m_LightingTexture, outputTexture);
                 }
             }
         }

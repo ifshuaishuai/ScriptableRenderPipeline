@@ -22,7 +22,30 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
 
         protected override UnityEngine.Rendering.RenderPipeline CreatePipeline()
         {
-            return new HDRenderPipeline(this);
+            // safe: When we return a null render pipline it will do nothing in the rendering
+            HDRenderPipeline pipeline = null;
+
+            // We need to do catch every errors that happend during the HDRP build, when we upgrade the
+            // HDRP package, some required assets are not yet imported by the package manager when the
+            // pipeline is created so in that case, we just return a null pipeline. Some error may appear
+            // when we upgrade the pipeline but it's better than breaking HDRP resources an causing more
+            // errors.
+            try
+            {
+                pipeline = new HDRenderPipeline(this);
+            } catch (Exception e) {
+                UnityEngine.Debug.LogError(e);
+            }
+
+            return pipeline;
+        }
+
+        protected override void OnValidate()
+        {
+            //Do not reconstruct the pipeline if we modify other assets.
+            //OnValidate is called once at first selection of the asset.
+            if (GraphicsSettings.renderPipelineAsset == this)
+                base.OnValidate();
         }
 
         [SerializeField]
@@ -32,6 +55,14 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
         {
             get { return m_RenderPipelineResources; }
             set { m_RenderPipelineResources = value; }
+        }
+
+        [SerializeField]
+        HDRenderPipelineRayTracingResources m_RenderPipelineRayTracingResources;
+        public HDRenderPipelineRayTracingResources renderPipelineRayTracingResources
+        {
+            get { return m_RenderPipelineRayTracingResources; }
+            set { m_RenderPipelineRayTracingResources = value; }
         }
 
 #if UNITY_EDITOR
@@ -89,31 +120,37 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
             {
                 return new ReflectionSystemParameters
                 {
-                    maxPlanarReflectionProbePerCamera = renderPipelineSettings.lightLoopSettings.planarReflectionProbeCacheSize,
+                    maxPlanarReflectionProbePerCamera = currentPlatformRenderPipelineSettings.lightLoopSettings.planarReflectionProbeCacheSize,
                     maxActivePlanarReflectionProbe = 512,
-                    planarReflectionProbeSize = (int)renderPipelineSettings.lightLoopSettings.planarReflectionTextureSize,
+                    planarReflectionProbeSize = (int)currentPlatformRenderPipelineSettings.lightLoopSettings.planarReflectionTextureSize,
                     maxActiveReflectionProbe = 512,
-                    reflectionProbeSize = (int)renderPipelineSettings.lightLoopSettings.reflectionCubemapSize
+                    reflectionProbeSize = (int)currentPlatformRenderPipelineSettings.lightLoopSettings.reflectionCubemapSize
                 };
             }
         }
 
+        // Note: having m_RenderPipelineSettings serializable allows it to be modified in editor.
+        // And having it private with a getter property force a copy.
+        // As there is no setter, it thus cannot be modified by code.
+        // This ensure immutability at runtime.
+
         // Store the various RenderPipelineSettings for each platform (for now only one)
-        public RenderPipelineSettings renderPipelineSettings = new RenderPipelineSettings();
+        [SerializeField, FormerlySerializedAs("renderPipelineSettings")]
+        RenderPipelineSettings m_RenderPipelineSettings = RenderPipelineSettings.@default;
 
         // Return the current use RenderPipelineSettings (i.e for the current platform)
-        public RenderPipelineSettings GetRenderPipelineSettings()
-        {
-            return renderPipelineSettings;
-        }
+        public RenderPipelineSettings currentPlatformRenderPipelineSettings => m_RenderPipelineSettings;
 
         public bool allowShaderVariantStripping = true;
         public bool enableSRPBatcher = true;
         public ShaderVariantLogLevel shaderVariantLogLevel = ShaderVariantLogLevel.Disabled;
 
         [SerializeField]
+        [Obsolete("Use diffusionProfileSettingsList instead")]
         public DiffusionProfileSettings diffusionProfileSettings;
 
+        [SerializeField]
+        public DiffusionProfileSettings[] diffusionProfileSettingsList = new DiffusionProfileSettings[0];
 
         // HDRP use GetRenderingLayerMaskNames to create its light linking system
         // Mean here we define our name for light linking.
@@ -277,10 +314,10 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
 
             // Update all the individual defines
             bool needUpdate = false;
-            needUpdate |= UpdateDefineList(renderPipelineSettings.supportRayTracing, "ENABLE_RAYTRACING");
+            needUpdate |= UpdateDefineList(currentPlatformRenderPipelineSettings.supportRayTracing, "ENABLE_RAYTRACING");
 
             // Only set if it changed
-            if(needUpdate)
+            if (needUpdate)
             {
                 UnityEditor.PlayerSettings.SetScriptingDefineSymbolsForGroup(UnityEditor.BuildTargetGroup.Standalone, string.Join(";", defineArray.ToArray()));
             }

@@ -42,15 +42,15 @@ float3 PreEvaluateDirectionalLightTransmission(BSDFData bsdfData, inout Directio
             NdotL = -NdotL;
 
             // However, we don't want baked or contact shadows.
-            light.contactShadowIndex   = -1;
+            light.contactShadowMask    = 0;
             light.shadowMaskSelector.x = -1;
 
             // We use the precomputed value (based on "baked" thickness).
             transmittance = bsdfData.transmittance;
 
-            if (!HasFlag(bsdfData.materialFeatures, MATERIALFEATUREFLAGS_TRANSMISSION_MODE_THIN_THICKNESS))
+            if (HasFlag(bsdfData.materialFeatures, MATERIALFEATUREFLAGS_TRANSMISSION_MODE_THICK_THICKNESS))
             {
-                // The mixed thickness mode is not supported by directional lights
+                // The thick thickness mode is not supported by directional lights
                 // due to poor quality and high performance impact.
                 // Keeping NdotL negative will ensure that nothing is evaluated.
                 light.shadowIndex = -1;
@@ -76,7 +76,7 @@ DirectLighting ShadeSurface_Directional(LightLoopContext lightLoopContext,
     // Note: We use NdotL here to early out, but in case of clear coat this is not correct. But we are OK with this
     bool surfaceReflection = NdotL > 0;
 
-    // Caution: this function modifies N, NdotL, contactShadowIndex and shadowMaskSelector.
+    // Caution: this function modifies N, NdotL, contactShadowMask and shadowMaskSelector.
     float3 transmittance = PreEvaluateDirectionalLightTransmission(bsdfData, light, N, NdotL);
 
     float3 color; float attenuation;
@@ -99,7 +99,7 @@ DirectLighting ShadeSurface_Directional(LightLoopContext lightLoopContext,
 
         if (surfaceReflection)
         {
-            attenuation    *= ComputeMicroShadowing(bsdfData, NdotL);
+            attenuation *= ComputeMicroShadowing(bsdfData, NdotL);
             float intensity = attenuation * NdotL;
 
             lighting.diffuse  = diffuseBsdf  * (intensity * light.diffuseDimmer);
@@ -161,12 +161,12 @@ float3 PreEvaluatePunctualLightTransmission(LightLoopContext lightLoopContext,
             NdotL = -NdotL;
 
             // However, we don't want baked or contact shadows.
-            light.contactShadowIndex   = -1;
+            light.contactShadowMask    = 0;
             light.shadowMaskSelector.x = -1;
 
             transmittance = bsdfData.transmittance;
 
-            if (!HasFlag(bsdfData.materialFeatures, MATERIALFEATUREFLAGS_TRANSMISSION_MODE_THIN_THICKNESS) && (light.shadowIndex >= 0))
+            if (HasFlag(bsdfData.materialFeatures, MATERIALFEATUREFLAGS_TRANSMISSION_MODE_THICK_THICKNESS) && (light.shadowIndex >= 0))
             {
                 // We can compute thickness from shadow.
                 // Compute the distance from the light to the back face of the object along the light direction.
@@ -179,13 +179,13 @@ float3 PreEvaluatePunctualLightTransmission(LightLoopContext lightLoopContext,
                 // Therefore, we need to find the thickness along the normal.
                 // Warning: based on the artist's input, dependence on the NdotL has been disabled.
                 float thicknessInUnits       = (distFrontFaceToLight - distBackFaceToLight) /* * -NdotL */;
-                float thicknessInMeters      = thicknessInUnits * _WorldScales[bsdfData.diffusionProfile].x;
+                float thicknessInMeters      = thicknessInUnits * _WorldScales[bsdfData.diffusionProfileIndex].x;
                 float thicknessInMillimeters = thicknessInMeters * MILLIMETERS_PER_METER;
 
                 // We need to make sure it's not less than the baked thickness to minimize light leaking.
                 float thicknessDelta = max(0, thicknessInMillimeters - bsdfData.thickness);
 
-                float3 S = _ShapeParams[bsdfData.diffusionProfile].rgb;
+                float3 S = _ShapeParams[bsdfData.diffusionProfileIndex].rgb;
 
             #if 0
                 float3 expOneThird = exp(((-1.0 / 3.0) * thicknessDelta) * S);
@@ -229,7 +229,7 @@ DirectLighting ShadeSurface_Punctual(LightLoopContext lightLoopContext,
     // Note: We use NdotL here to early out, but in case of clear coat this is not correct. But we are OK with this
     bool surfaceReflection = NdotL > 0;
 
-    // Caution: this function modifies N, NdotL, shadowIndex, contactShadowIndex and shadowMaskSelector.
+    // Caution: this function modifies N, NdotL, shadowIndex, contactShadowMask and shadowMaskSelector.
     float3 transmittance = PreEvaluatePunctualLightTransmission(lightLoopContext, posInput, bsdfData,
                                                                 light, distances.x, N, L, NdotL);
     float3 color; float attenuation;

@@ -2,7 +2,7 @@
 
 // Generic function that handles the reflection code
 [shader("closesthit")]
-void ClosestHitMain(inout RayIntersection rayIntersection : SV_RayPayload, AttributeData attributeData : SV_IntersectionAttributes)
+void ClosestHitForward(inout RayIntersection rayIntersection : SV_RayPayload, AttributeData attributeData : SV_IntersectionAttributes)
 {
 	// The first thing that we should do is grab the intersection vertice
     IntersectionVertice currentvertex;
@@ -21,7 +21,7 @@ void ClosestHitMain(inout RayIntersection rayIntersection : SV_RayPayload, Attri
     // Make sure to add the additional travel distance
     float travelDistance = length(pointWSPos - rayIntersection.origin);
     rayIntersection.t = travelDistance;
-    rayIntersection.cone.width += travelDistance * rayIntersection.cone.spreadAngle;
+    rayIntersection.cone.width += travelDistance * abs(rayIntersection.cone.spreadAngle);
     
     PositionInputs posInput;
     posInput.positionWS = fragInput.positionRWS;
@@ -39,6 +39,7 @@ void ClosestHitMain(inout RayIntersection rayIntersection : SV_RayPayload, Attri
     // Compute the prelight data
     PreLightData preLightData = GetPreLightData(viewWS, posInput, bsdfData);
     float3 reflected = float3(0.0, 0.0, 0.0);
+    float reflectedWeight = 0.0;
     float3 transmitted = float3(0.0, 0.0, 0.0);
 
     // The intersection will launch a refraction ray only if the object is transparent and is has the refraction flag
@@ -75,11 +76,11 @@ void ClosestHitMain(inout RayIntersection rayIntersection : SV_RayPayload, Attri
         transmittedIntersection.remainingDepth = rayIntersection.remainingDepth - 1;
 
         // In order to achieve filtering for the textures, we need to compute the spread angle of the pixel
-        transmittedIntersection.cone.spreadAngle = _PixelSpreadAngle;
+        transmittedIntersection.cone.spreadAngle = _RaytracingPixelSpreadAngle;
         transmittedIntersection.cone.width = rayIntersection.cone.width;
         
         // Evaluate the ray intersection
-        TraceRay(_RaytracingAccelerationStructure, RAY_FLAG_CULL_BACK_FACING_TRIANGLES, 0xFF, 0, 1, 0, transmittedRay, transmittedIntersection);
+        TraceRay(_RaytracingAccelerationStructure, RAY_FLAG_CULL_BACK_FACING_TRIANGLES, RAYTRACING_OPAQUE_FLAG | RAYTRACING_TRANSPARENT_FLAG, 0, 1, 0, transmittedRay, transmittedIntersection);
             
         // Override the transmitted color
         transmitted = transmittedIntersection.color;
@@ -109,25 +110,28 @@ void ClosestHitMain(inout RayIntersection rayIntersection : SV_RayPayload, Attri
         reflectedIntersection.remainingDepth = rayIntersection.remainingDepth - 1;
 
         // In order to achieve filtering for the textures, we need to compute the spread angle of the pixel
-        reflectedIntersection.cone.spreadAngle = _PixelSpreadAngle;
+        reflectedIntersection.cone.spreadAngle = -_RaytracingPixelSpreadAngle;
         reflectedIntersection.cone.width = rayIntersection.cone.width;
         
         // Evaluate the ray intersection
-        TraceRay(_RaytracingAccelerationStructure, RAY_FLAG_CULL_BACK_FACING_TRIANGLES, 0xFF, 0, 1, 0, reflectedRay, reflectedIntersection);
+        TraceRay(_RaytracingAccelerationStructure, RAY_FLAG_CULL_BACK_FACING_TRIANGLES, RAYTRACING_OPAQUE_FLAG | RAYTRACING_TRANSPARENT_FLAG, 0, 1, 0, reflectedRay, reflectedIntersection);
 
         // Override the transmitted color
         reflected = reflectedIntersection.color;
+        reflectedWeight = 1.0;
     }
 
     // Run the lightloop
     float3 diffuseLighting;
     float3 specularLighting;
-    LightLoop(viewWS, posInput, preLightData, bsdfData, builtinData, reflected, transmitted, diffuseLighting, specularLighting);
+    LightLoop(viewWS, posInput, preLightData, bsdfData, builtinData, reflectedWeight, reflected, transmitted, diffuseLighting, specularLighting);
 
-    // Compute the Color of the current intersection
-    rayIntersection.color = (diffuseLighting + specularLighting) * GetCurrentExposureMultiplier();;
+    // Color display for the moment
+    rayIntersection.color = diffuseLighting + specularLighting;
 #else
-    rayIntersection.color = bsdfData.color;
+    // Given that we will be multiplying the final color by the current exposure multiplier outside of this function, we need to make sure that
+    // the unlit color is not impacted by that. Thus, we multiply it by the inverse of the current exposure multiplier.
+    rayIntersection.color = bsdfData.color * GetInverseCurrentExposureMultiplier() + builtinData.emissiveColor;
 #endif
 }
 

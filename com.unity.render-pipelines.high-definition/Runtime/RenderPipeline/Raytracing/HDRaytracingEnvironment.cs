@@ -9,71 +9,29 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
     public class HDRaytracingEnvironment : MonoBehaviour
     {
 #if ENABLE_RAYTRACING
+
+        // The set of raytracing passes that we support
+        public enum RaytracingPass
+        {
+            AmbientOcclusion = 0,
+            Reflection = (1<<0),
+            AreaShadow = (1<<1) ,
+            PrimaryVisibility = (1<<2),
+            IndirectDiffuse = (1<<3),
+        }
+        public readonly static int numRaytracingPasses = 5;
+
         // Generic Ray Data
         [Range(0.0f, 0.1f)]
         public float rayBias = 0.001f;
 
         /////////////////////////////////////////////////////////////////////////////////////////////////
         // Ambient Occlusion Data
-        // Flag that defines if the Ambient Occlusion should be Ray-traced
-        public bool raytracedAO = false;
-
-        // Filter Type for the ambient occlusion
-        public enum AOFilterMode
-        {
-            None,
-            Bilateral,
-            Nvidia
-        };
-        public AOFilterMode aoFilterMode = AOFilterMode.None;
-
-        // Max Ray Length for the AO
-        [Range(0.001f, 20.0f)]
-        public float aoRayLength = 5.0f;
-
-        // Number of Samples for Ambient Occlusion
-        [Range(1, 64)]
-        public int aoNumSamples = 4;
-
-        // AO Bilateral Filter Data
-        [Range(1, 27)]
-        public int aoBilateralRadius = 10;
-        [Range(0.001f, 9.0f)]
-        public float aoBilateralSigma = 5.0f;
-
-        // Nvidia AO Filter Data
-        [Range(1, 27)]
-        public int maxFilterWidthInPixels = 25;
-        [Range(0.0f, 10.0f)]
-        public float filterRadiusInMeters = 1.0f;
-        [Range(1.0f, 50.0f)]
-        public float normalSharpness = 30.0f;
+        public LayerMask aoLayerMask = -1;
 
         /////////////////////////////////////////////////////////////////////////////////////////////////
         // Reflection Data
-        // Flag that defines if the Reflections should be Ray-traced
-        public bool raytracedReflections = false;
-
-        // Max Ray Length for the Reflections
-        [Range(0.001f, 50.0f)]
-        public float reflRayLength = 5.0f;
-
-        // Number of Samples for the Reflections
-        [Range(1, 64)]
-        public int reflNumMaxSamples = 8;
-
-        public enum ReflectionsFilterMode
-        {
-            None,
-            Bilateral
-        };
-        public ReflectionsFilterMode reflFilterMode = ReflectionsFilterMode.None;
-
-        // Reflection Bilateral Filter Data
-        [Range(1, 27)]
-        public int reflBilateralRadius = 10;
-        [Range(0.001f, 9.0f)]
-        public float reflBilateralSigma = 5.0f;
+        public LayerMask reflLayerMask = -1;
 
         /////////////////////////////////////////////////////////////////////////////////////////////////
         // Light Cluster
@@ -88,6 +46,9 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
         // Flag that defines if raytraced objects should be rendered
         public bool raytracedObjects = false;
 
+        // Culling mask that defines the layers that the subscene used for this effect should use
+        public LayerMask raytracedLayerMask = -1;
+
         // This is the maximal depth that a ray can have for the primary visibility pass
         const int maxRayDepth = 10;
         [Range(1, maxRayDepth)]
@@ -99,15 +60,35 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
 
         /////////////////////////////////////////////////////////////////////////////////////////////////
         // Area Light Shadows
-        public bool raytracedShadows = false;
-        [Range(2, 32)]
-        public int shadowNumSamples = 4;
-        [Range(0, 4)]
-        public int numAreaLightShadows = 1;
+        public LayerMask shadowLayerMask = -1;
+
+        /////////////////////////////////////////////////////////////////////////////////////////////////
+        // Indirect diffuse
+        public bool raytracedIndirectDiffuse = false;
+
+        // Culling mask that defines the layers that the subscene used for this effect should use
+        public LayerMask indirectDiffuseLayerMask = -1;
+
+        [Range(1, 32)]
+        public int indirectDiffuseNumSamples = 4;
+        // Max Ray Length for the indirect diffuse
+        [Range(0.001f, 50.0f)]
+        public float indirectDiffuseRayLength = 20.0f;
+        // Value that is used to clamp the intensity to avoid fireflies
+        [Range(0.01f, 10.0f)]
+        public float indirectDiffuseClampValue = 1.0f;
+
+        // The different reflection filtering modes
+        public enum IndirectDiffuseFilterMode
+        {
+            SpatioTemporal,
+            None
+        };
+        public IndirectDiffuseFilterMode indirectDiffuseFilterMode = IndirectDiffuseFilterMode.None;
+
+        // The radius for the spatio temporal filter
         [Range(1, 27)]
-        public int shadowFilterRadius = 10;
-        [Range(0.001f, 9.0f)]
-        public float shadowFilterSigma = 5.0f;
+        public int indirectDiffuseFilterRadius = 16;
 
         void Start()
         {
