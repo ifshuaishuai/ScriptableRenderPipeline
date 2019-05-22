@@ -99,6 +99,8 @@ namespace UnityEngine.Rendering.LWRP
             Lightmapping.SetDelegate(lightsDelegate);
 
             CameraCaptureBridge.enabled = true;
+
+            RenderingUtils.ClearSystemInfoCache();
         }
 
         protected override void Dispose(bool disposing)
