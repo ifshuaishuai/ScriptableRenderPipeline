@@ -1,28 +1,28 @@
 /* Node Category Colors */
 MaterialNodeView.Artistic #title {
-    border-color:#008080;
+    border-color:#DB773B;
 }
 
 MaterialNodeView.Channel #title {
-    border-color:#667328;
+    border-color:#97D13D;
 }
 
 MaterialNodeView.Input #title {
-    border-color:#99291F;
+    border-color:#CB3022;
 }
 
 MaterialNodeView.Math #title {
-    border-color:#1F4799;
+    border-color:#4B92F3;
 }
 
 MaterialNodeView.Procedural #title {
-    border-color:#993D88;
+    border-color:#9C4FFF;
 }
 
 MaterialNodeView.Utility #title {
-    border-color:#6B83B3;
+    border-color:#AEAEAE;
 }
 
 MaterialNodeView.UV #title {
-    border-color:#268044;
+    border-color:#08D78B;
 }
